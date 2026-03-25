@@ -105,7 +105,22 @@ export default function HCPHotspotMap() {
         (sum, m) => sum + getDensity(m, activeSpecialty),
         0
       ) / allInRadius.length;
-    return { origin, nearby, centroid, totalDocs, avgDensity, allInRadius };
+    // Find closest comparison metro (not the origin)
+    const closestComparison = nearby.length > 0 ? nearby[0] : null;
+
+    // Top specialties in the radius for the insight text
+    const specCounts = {};
+    for (const m of allInRadius) {
+      for (const [spec, count] of Object.entries(m.docs)) {
+        specCounts[spec] = (specCounts[spec] || 0) + count;
+      }
+    }
+    const topSpecs = Object.entries(specCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([s]) => s);
+
+    return { origin, nearby, centroid, totalDocs, avgDensity, allInRadius, closestComparison, topSpecs };
   }, [selectedCity, radius, activeSpecialty]);
 
   // Set of city names in radius (for dimming)
@@ -120,7 +135,7 @@ export default function HCPHotspotMap() {
     const svg = d3.select(svgRef.current);
     const zoom = d3
       .zoom()
-      .scaleExtent([1, 12])
+      .scaleExtent([1, 40])
       .on("zoom", (event) => {
         setTransform(event.transform);
       });
@@ -273,6 +288,54 @@ export default function HCPHotspotMap() {
                       />
                     );
                   })}
+
+                  {/* Comparison highlight rings + badges */}
+                  {analysis.nearby.map((entry) => {
+                    const p = projected.find((m) => m.city === entry.metro.city);
+                    if (!p) return null;
+                    const count = getDocCount(entry.metro, activeSpecialty);
+                    return (
+                      <g key={`comp-${entry.metro.city}`}>
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r={14 / transform.k}
+                          className="comparison-ring"
+                        />
+                        <rect
+                          x={p.x - 18 / transform.k}
+                          y={p.y - 28 / transform.k}
+                          width={36 / transform.k}
+                          height={14 / transform.k}
+                          rx={4 / transform.k}
+                          className="comparison-badge-bg"
+                        />
+                        <text
+                          x={p.x}
+                          y={p.y - 19 / transform.k}
+                          textAnchor="middle"
+                          className="comparison-badge-text"
+                          style={{ fontSize: `${9 / transform.k}px` }}
+                        >
+                          {count.toLocaleString()}
+                        </text>
+                      </g>
+                    );
+                  })}
+
+                  {/* Origin city glow ring */}
+                  {(() => {
+                    const orig = projected.find((m) => m.city === selectedCity);
+                    if (!orig) return null;
+                    return (
+                      <circle
+                        cx={orig.x}
+                        cy={orig.y}
+                        r={18 / transform.k}
+                        className="origin-glow-ring"
+                      />
+                    );
+                  })()}
                 </>
               )}
 
@@ -334,6 +397,54 @@ export default function HCPHotspotMap() {
                     className="meeting-point-inner"
                   />
                 </g>
+              )}
+
+              {/* Centroid speech-bubble callout */}
+              {centroidPos && analysis && (
+                <foreignObject
+                  x={centroidPos.x - 160 / transform.k}
+                  y={centroidPos.y - 175 / transform.k}
+                  width={320 / transform.k}
+                  height={160 / transform.k}
+                  style={{ overflow: "visible" }}
+                >
+                  <div
+                    className="centroid-callout"
+                    style={{
+                      transform: `scale(${1 / transform.k})`,
+                      transformOrigin: "bottom center",
+                    }}
+                  >
+                    <div className="centroid-callout-title">
+                      🎯 Optimal {activeSpecialty === "All Specialties" ? "" : activeSpecialty + " "}Event Location
+                    </div>
+                    <div className="centroid-callout-body">
+                      For a <strong>{activeSpecialty.toLowerCase()}</strong> event near{" "}
+                      <strong>{analysis.origin.city}</strong>, host near{" "}
+                      <span className="centroid-coords">
+                        {analysis.centroid.lat.toFixed(4)}°N, {Math.abs(analysis.centroid.lng).toFixed(4)}°W
+                      </span>
+                    </div>
+                    <div className="centroid-callout-stats">
+                      <span>{analysis.totalDocs.toLocaleString()} HCPs</span>
+                      <span className="centroid-sep">·</span>
+                      <span>{analysis.allInRadius.length} metros</span>
+                      <span className="centroid-sep">·</span>
+                      <span>{radius} mi radius</span>
+                    </div>
+                    {analysis.topSpecs && (
+                      <div className="centroid-callout-mix">
+                        Expect {analysis.topSpecs.join(", ")} practitioners
+                      </div>
+                    )}
+                    {analysis.closestComparison && (
+                      <div className="centroid-callout-comparison">
+                        Nearest comparison: {analysis.closestComparison.metro.city} ({Math.round(analysis.closestComparison.distance)} mi)
+                      </div>
+                    )}
+                    <div className="centroid-callout-pointer" />
+                  </div>
+                </foreignObject>
               )}
             </g>
           </svg>

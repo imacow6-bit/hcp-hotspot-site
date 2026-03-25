@@ -561,6 +561,134 @@ body {
   color: var(--cyan);
 }
 
+/* ===== Comparison Highlights ===== */
+.comparison-ring {
+  fill: none;
+  stroke: var(--purple);
+  stroke-width: 2.5;
+  opacity: 0.7;
+  animation: comparison-pulse 2s ease-in-out infinite;
+}
+
+@keyframes comparison-pulse {
+  0%, 100% { opacity: 0.7; stroke-width: 2.5; }
+  50% { opacity: 0.35; stroke-width: 4; }
+}
+
+.comparison-badge-bg {
+  fill: var(--purple);
+  opacity: 0.85;
+}
+
+.comparison-badge-text {
+  font-family: var(--font);
+  fill: #fff;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.origin-glow-ring {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 3;
+  opacity: 0.6;
+  filter: drop-shadow(0 0 6px var(--cyan-glow));
+  animation: origin-pulse 2s ease-in-out infinite;
+}
+
+@keyframes origin-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.25; }
+}
+
+/* ===== Centroid Speech-Bubble Callout ===== */
+.centroid-callout {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 145, 0, 0.3);
+  border-radius: var(--radius);
+  padding: 14px 16px 18px;
+  color: var(--text);
+  font-family: var(--font);
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 145, 0, 0.1);
+  pointer-events: none;
+  min-width: 280px;
+  width: max-content;
+  max-width: 340px;
+}
+
+.centroid-callout-pointer {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid rgba(255, 145, 0, 0.3);
+}
+
+.centroid-callout-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--orange);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.centroid-callout-body {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-bright);
+  margin-bottom: 8px;
+}
+
+.centroid-callout-body strong {
+  color: var(--cyan);
+}
+
+.centroid-coords {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--orange);
+  font-weight: 600;
+}
+
+.centroid-callout-stats {
+  font-size: 11px;
+  color: var(--text);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.centroid-callout-stats span {
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.centroid-sep {
+  color: var(--text-dim) !important;
+  font-weight: 400 !important;
+}
+
+.centroid-callout-mix {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.centroid-callout-comparison {
+  font-size: 11px;
+  color: var(--purple);
+  font-weight: 500;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .topbar { padding: 10px 16px; }

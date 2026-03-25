@@ -1,0 +1,30 @@
+NPPES ZIP Code Analysis Plan
+This plan outlines the steps to extract and analyze healthcare provider (HCP) density by ZIP code using the NPPES data.
+
+Proposed Changes
+[Data Processing]
+[NEW] 
+nppes_analyzer.py
+A Python script to process the large NPPES CSV files efficiently.
+
+Main File Processing:
+Use pandas.read_csv with chunksize to handle the 11GB file.
+Extract NPI and Provider Business Practice Location Address Postal Code.
+Clean ZIP codes to 5 digits.
+Practice Location File Processing:
+Extract NPI and Provider Secondary Practice Location Address - Postal Code.
+Clean ZIP codes to 5 digits.
+Aggregation:
+Combine (NPI, ZIP) pairs from both files.
+Drop duplicates to ensure we count unique providers per ZIP.
+Group by ZIP and count.
+Output:
+Save the resulting ZIP code counts to a JSON or CSV file for visualization.
+Verification Plan
+Automated Tests
+Create a small subset of the NPPES data (e.g., first 1000 rows) to test the script.
+Verify that the cleaning logic correctly handles 5-digit and 9-digit ZIP codes.
+Verify that the aggregation correctly includes both primary and secondary practice locations.
+Manual Verification
+Check the top 10 ZIP codes by HCP count against known high-density areas (e.g., major medical centers).
+Compare results with and without the Practice Location Reference File to quantify the "edge" mentioned by the user.
