@@ -1,0 +1,290 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "source": "Bootstrapped from Medicare Part D prescribing patterns + clinical domain knowledge",
+    "note": "Generic names match Part D Gnrc_Name field. Brand names for reference only. Add client-specific drugs to the 'targeted' array for campaign-specific queries.",
+    "specialties": ["Cardiology", "Oncology", "Neurology", "Endocrinology", "Pulmonology", "Orthopedics"]
+  },
+
+  "Cardiology": {
+    "drug_classes": {
+      "heart_failure": {
+        "label": "Heart Failure",
+        "drugs": [
+          { "generic": "sacubitril/valsartan",   "brand": "Entresto",  "tier": "anchor" },
+          { "generic": "carvedilol",              "brand": "Coreg",     "tier": "anchor" },
+          { "generic": "metoprolol succinate",    "brand": "Toprol-XL", "tier": "anchor" },
+          { "generic": "furosemide",              "brand": "Lasix",     "tier": "anchor" },
+          { "generic": "spironolactone",          "brand": "Aldactone", "tier": "anchor" },
+          { "generic": "empagliflozin",           "brand": "Jardiance", "tier": "anchor" },
+          { "generic": "dapagliflozin",           "brand": "Farxiga",   "tier": "anchor" }
+        ]
+      },
+      "lipids": {
+        "label": "Lipid Management",
+        "drugs": [
+          { "generic": "atorvastatin",            "brand": "Lipitor",   "tier": "anchor" },
+          { "generic": "rosuvastatin",            "brand": "Crestor",   "tier": "anchor" },
+          { "generic": "evolocumab",              "brand": "Repatha",   "tier": "specialty" },
+          { "generic": "alirocumab",              "brand": "Praluent",  "tier": "specialty" },
+          { "generic": "inclisiran",              "brand": "Leqvio",    "tier": "specialty" }
+        ]
+      },
+      "anticoagulation": {
+        "label": "Anticoagulation / AFib",
+        "drugs": [
+          { "generic": "apixaban",               "brand": "Eliquis",   "tier": "anchor" },
+          { "generic": "rivaroxaban",            "brand": "Xarelto",   "tier": "anchor" },
+          { "generic": "dabigatran",             "brand": "Pradaxa",   "tier": "anchor" },
+          { "generic": "amiodarone",             "brand": "Pacerone",  "tier": "anchor" },
+          { "generic": "digoxin",                "brand": "Lanoxin",   "tier": "anchor" }
+        ]
+      },
+      "hypertension": {
+        "label": "Hypertension / General CV",
+        "drugs": [
+          { "generic": "lisinopril",             "brand": "Prinivil",  "tier": "anchor" },
+          { "generic": "amlodipine",             "brand": "Norvasc",   "tier": "anchor" },
+          { "generic": "losartan",               "brand": "Cozaar",    "tier": "anchor" }
+        ]
+      }
+    },
+    "targeted": []
+  },
+
+  "Oncology": {
+    "drug_classes": {
+      "immunotherapy": {
+        "label": "Immunotherapy / Checkpoint Inhibitors",
+        "drugs": [
+          { "generic": "pembrolizumab",          "brand": "Keytruda",  "tier": "anchor" },
+          { "generic": "nivolumab",              "brand": "Opdivo",    "tier": "anchor" },
+          { "generic": "atezolizumab",           "brand": "Tecentriq", "tier": "anchor" },
+          { "generic": "ipilimumab",             "brand": "Yervoy",    "tier": "specialty" }
+        ]
+      },
+      "breast": {
+        "label": "Breast Cancer",
+        "drugs": [
+          { "generic": "palbociclib",            "brand": "Ibrance",   "tier": "anchor" },
+          { "generic": "ribociclib",             "brand": "Kisqali",   "tier": "anchor" },
+          { "generic": "trastuzumab",            "brand": "Herceptin", "tier": "anchor" },
+          { "generic": "letrozole",              "brand": "Femara",    "tier": "anchor" },
+          { "generic": "anastrozole",            "brand": "Arimidex",  "tier": "anchor" },
+          { "generic": "fulvestrant",            "brand": "Faslodex",  "tier": "anchor" },
+          { "generic": "tamoxifen",              "brand": "Nolvadex",  "tier": "anchor" }
+        ]
+      },
+      "prostate": {
+        "label": "Prostate Cancer",
+        "drugs": [
+          { "generic": "enzalutamide",           "brand": "Xtandi",    "tier": "anchor" },
+          { "generic": "abiraterone",            "brand": "Zytiga",    "tier": "anchor" },
+          { "generic": "darolutamide",           "brand": "Nubeqa",    "tier": "specialty" },
+          { "generic": "leuprolide",             "brand": "Lupron",    "tier": "anchor" }
+        ]
+      },
+      "hematologic": {
+        "label": "Hematologic Malignancies",
+        "drugs": [
+          { "generic": "ibrutinib",              "brand": "Imbruvica", "tier": "anchor" },
+          { "generic": "lenalidomide",           "brand": "Revlimid",  "tier": "anchor" },
+          { "generic": "rituximab",              "brand": "Rituxan",   "tier": "anchor" },
+          { "generic": "venetoclax",             "brand": "Venclexta", "tier": "specialty" }
+        ]
+      },
+      "lung": {
+        "label": "Lung Cancer",
+        "drugs": [
+          { "generic": "osimertinib",            "brand": "Tagrisso",  "tier": "anchor" },
+          { "generic": "alectinib",              "brand": "Alecensa",  "tier": "specialty" },
+          { "generic": "capmatinib",             "brand": "Tabrecta",  "tier": "specialty" }
+        ]
+      },
+      "general_chemo": {
+        "label": "General Chemotherapy",
+        "drugs": [
+          { "generic": "capecitabine",           "brand": "Xeloda",    "tier": "anchor" },
+          { "generic": "bevacizumab",            "brand": "Avastin",   "tier": "anchor" }
+        ]
+      }
+    },
+    "targeted": []
+  },
+
+  "Neurology": {
+    "drug_classes": {
+      "multiple_sclerosis": {
+        "label": "Multiple Sclerosis",
+        "drugs": [
+          { "generic": "ocrelizumab",            "brand": "Ocrevus",   "tier": "anchor" },
+          { "generic": "natalizumab",            "brand": "Tysabri",   "tier": "anchor" },
+          { "generic": "dimethyl fumarate",      "brand": "Tecfidera", "tier": "anchor" },
+          { "generic": "fingolimod",             "brand": "Gilenya",   "tier": "anchor" },
+          { "generic": "ofatumumab",             "brand": "Kesimpta",  "tier": "specialty" }
+        ]
+      },
+      "migraine": {
+        "label": "Migraine",
+        "drugs": [
+          { "generic": "erenumab",               "brand": "Aimovig",   "tier": "anchor" },
+          { "generic": "fremanezumab",           "brand": "Ajovy",     "tier": "anchor" },
+          { "generic": "galcanezumab",           "brand": "Emgality",  "tier": "anchor" },
+          { "generic": "sumatriptan",            "brand": "Imitrex",   "tier": "anchor" },
+          { "generic": "topiramate",             "brand": "Topamax",   "tier": "anchor" }
+        ]
+      },
+      "epilepsy": {
+        "label": "Epilepsy / Seizures",
+        "drugs": [
+          { "generic": "levetiracetam",          "brand": "Keppra",    "tier": "anchor" },
+          { "generic": "lacosamide",             "brand": "Vimpat",    "tier": "anchor" },
+          { "generic": "brivaracetam",           "brand": "Briviact",  "tier": "specialty" }
+        ]
+      },
+      "parkinsons_alzheimers": {
+        "label": "Parkinson's / Alzheimer's",
+        "drugs": [
+          { "generic": "carbidopa/levodopa",     "brand": "Sinemet",   "tier": "anchor" },
+          { "generic": "donepezil",              "brand": "Aricept",   "tier": "anchor" },
+          { "generic": "memantine",              "brand": "Namenda",   "tier": "anchor" },
+          { "generic": "lecanemab",              "brand": "Leqembi",   "tier": "specialty" }
+        ]
+      },
+      "neuropathic_pain": {
+        "label": "Neuropathic Pain",
+        "drugs": [
+          { "generic": "gabapentin",             "brand": "Neurontin", "tier": "anchor" },
+          { "generic": "pregabalin",             "brand": "Lyrica",    "tier": "anchor" },
+          { "generic": "duloxetine",             "brand": "Cymbalta",  "tier": "anchor" }
+        ]
+      }
+    },
+    "targeted": []
+  },
+
+  "Endocrinology": {
+    "drug_classes": {
+      "glp1": {
+        "label": "GLP-1 / Obesity / Diabetes",
+        "drugs": [
+          { "generic": "semaglutide",            "brand": "Ozempic/Wegovy",  "tier": "anchor" },
+          { "generic": "dulaglutide",            "brand": "Trulicity",       "tier": "anchor" },
+          { "generic": "liraglutide",            "brand": "Victoza/Saxenda", "tier": "anchor" },
+          { "generic": "tirzepatide",            "brand": "Mounjaro/Zepbound","tier": "anchor" }
+        ]
+      },
+      "diabetes_oral": {
+        "label": "Oral Diabetes Agents",
+        "drugs": [
+          { "generic": "metformin",              "brand": "Glucophage", "tier": "anchor" },
+          { "generic": "empagliflozin",          "brand": "Jardiance",  "tier": "anchor" },
+          { "generic": "dapagliflozin",          "brand": "Farxiga",    "tier": "anchor" },
+          { "generic": "sitagliptin",            "brand": "Januvia",    "tier": "anchor" },
+          { "generic": "canagliflozin",          "brand": "Invokana",   "tier": "anchor" }
+        ]
+      },
+      "insulin": {
+        "label": "Insulin",
+        "drugs": [
+          { "generic": "insulin glargine",       "brand": "Lantus",     "tier": "anchor" },
+          { "generic": "insulin degludec",       "brand": "Tresiba",    "tier": "anchor" },
+          { "generic": "insulin aspart",         "brand": "NovoLog",    "tier": "anchor" }
+        ]
+      },
+      "thyroid_bone": {
+        "label": "Thyroid / Bone",
+        "drugs": [
+          { "generic": "levothyroxine",          "brand": "Synthroid",  "tier": "anchor" },
+          { "generic": "methimazole",            "brand": "Tapazole",   "tier": "anchor" },
+          { "generic": "denosumab",              "brand": "Prolia",     "tier": "anchor" },
+          { "generic": "alendronate",            "brand": "Fosamax",    "tier": "anchor" },
+          { "generic": "teriparatide",           "brand": "Forteo",     "tier": "specialty" }
+        ]
+      }
+    },
+    "targeted": []
+  },
+
+  "Pulmonology": {
+    "drug_classes": {
+      "asthma_biologics": {
+        "label": "Severe Asthma Biologics",
+        "drugs": [
+          { "generic": "dupilumab",              "brand": "Dupixent",   "tier": "anchor" },
+          { "generic": "mepolizumab",            "brand": "Nucala",     "tier": "anchor" },
+          { "generic": "benralizumab",           "brand": "Fasenra",    "tier": "anchor" },
+          { "generic": "omalizumab",             "brand": "Xolair",     "tier": "anchor" },
+          { "generic": "tezepelumab",            "brand": "Tezspire",   "tier": "specialty" }
+        ]
+      },
+      "copd": {
+        "label": "COPD",
+        "drugs": [
+          { "generic": "tiotropium",             "brand": "Spiriva",    "tier": "anchor" },
+          { "generic": "budesonide/formoterol",  "brand": "Symbicort",  "tier": "anchor" },
+          { "generic": "fluticasone/salmeterol", "brand": "Advair",     "tier": "anchor" },
+          { "generic": "umeclidinium/vilanterol","brand": "Anoro",      "tier": "anchor" },
+          { "generic": "roflumilast",            "brand": "Daliresp",   "tier": "specialty" }
+        ]
+      },
+      "pulm_fibrosis": {
+        "label": "Pulmonary Fibrosis (IPF)",
+        "drugs": [
+          { "generic": "pirfenidone",            "brand": "Esbriet",    "tier": "anchor" },
+          { "generic": "nintedanib",             "brand": "Ofev",       "tier": "anchor" }
+        ]
+      },
+      "rescue": {
+        "label": "Rescue / General",
+        "drugs": [
+          { "generic": "albuterol",              "brand": "ProAir",     "tier": "anchor" },
+          { "generic": "montelukast",            "brand": "Singulair",  "tier": "anchor" }
+        ]
+      }
+    },
+    "targeted": []
+  },
+
+  "Orthopedics": {
+    "drug_classes": {
+      "pain_inflammation": {
+        "label": "Pain / Anti-Inflammatory",
+        "drugs": [
+          { "generic": "celecoxib",              "brand": "Celebrex",   "tier": "anchor" },
+          { "generic": "meloxicam",              "brand": "Mobic",      "tier": "anchor" },
+          { "generic": "diclofenac",             "brand": "Voltaren",   "tier": "anchor" },
+          { "generic": "naproxen",               "brand": "Aleve",      "tier": "anchor" },
+          { "generic": "tramadol",               "brand": "Ultram",     "tier": "anchor" }
+        ]
+      },
+      "bone_health": {
+        "label": "Bone Health / Osteoporosis",
+        "drugs": [
+          { "generic": "denosumab",              "brand": "Prolia",     "tier": "anchor" },
+          { "generic": "alendronate",            "brand": "Fosamax",    "tier": "anchor" },
+          { "generic": "zoledronic acid",        "brand": "Reclast",    "tier": "anchor" },
+          { "generic": "teriparatide",           "brand": "Forteo",     "tier": "specialty" },
+          { "generic": "romosozumab",            "brand": "Evenity",    "tier": "specialty" }
+        ]
+      },
+      "neuropathic_muscle": {
+        "label": "Neuropathic Pain / Muscle",
+        "drugs": [
+          { "generic": "gabapentin",             "brand": "Neurontin",  "tier": "anchor" },
+          { "generic": "pregabalin",             "brand": "Lyrica",     "tier": "anchor" },
+          { "generic": "cyclobenzaprine",        "brand": "Flexeril",   "tier": "anchor" },
+          { "generic": "baclofen",               "brand": "Lioresal",   "tier": "anchor" }
+        ]
+      },
+      "joint_injection": {
+        "label": "Joint Injections",
+        "drugs": [
+          { "generic": "methylprednisolone",     "brand": "Depo-Medrol","tier": "anchor" },
+          { "generic": "triamcinolone",          "brand": "Kenalog",    "tier": "anchor" }
+        ]
+      }
+    },
+    "targeted": []
+  }
+}
