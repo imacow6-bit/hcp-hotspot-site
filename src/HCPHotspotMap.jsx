@@ -205,6 +205,17 @@ export default function HCPHotspotMap() {
     return pos ? { x: pos[0], y: pos[1] } : null;
   }, [analysis, projection]);
 
+  // Convert centroid SVG coords → screen coords (relative to map-container)
+  const centroidScreenPos = (() => {
+    if (!centroidPos || !svgRef.current) return null;
+    const rect = svgRef.current.getBoundingClientRect();
+    const scaleX = rect.width / WIDTH;
+    const scaleY = rect.height / HEIGHT;
+    const screenX = (centroidPos.x * transform.k + transform.x) * scaleX;
+    const screenY = (centroidPos.y * transform.k + transform.y) * scaleY;
+    return { x: screenX, y: screenY };
+  })();
+
   // Top cities for labels (visible at lower zoom)
   const topCities = useMemo(() => {
     const sorted = [...projected].sort(
@@ -343,7 +354,7 @@ export default function HCPHotspotMap() {
               {projected.map((m) => {
                 const count = getDocCount(m, activeSpecialty);
                 const density = getDensity(m, activeSpecialty);
-                const r = 3 + (count / maxCount) * 18;
+                const r = Math.max(2, (3 + (count / maxCount) * 18) / transform.k);
                 const isDimmed =
                   citiesInRadius && !citiesInRadius.has(m.city);
                 const isSelected = m.city === selectedCity;
@@ -399,55 +410,48 @@ export default function HCPHotspotMap() {
                 </g>
               )}
 
-              {/* Centroid speech-bubble callout */}
-              {centroidPos && analysis && (
-                <foreignObject
-                  x={centroidPos.x - 160 / transform.k}
-                  y={centroidPos.y - 175 / transform.k}
-                  width={320 / transform.k}
-                  height={160 / transform.k}
-                  style={{ overflow: "visible" }}
-                >
-                  <div
-                    className="centroid-callout"
-                    style={{
-                      transform: `scale(${1 / transform.k})`,
-                      transformOrigin: "bottom center",
-                    }}
-                  >
-                    <div className="centroid-callout-title">
-                      🎯 Optimal {activeSpecialty === "All Specialties" ? "" : activeSpecialty + " "}Event Location
-                    </div>
-                    <div className="centroid-callout-body">
-                      For a <strong>{activeSpecialty.toLowerCase()}</strong> event near{" "}
-                      <strong>{analysis.origin.city}</strong>, host near{" "}
-                      <span className="centroid-coords">
-                        {analysis.centroid.lat.toFixed(4)}°N, {Math.abs(analysis.centroid.lng).toFixed(4)}°W
-                      </span>
-                    </div>
-                    <div className="centroid-callout-stats">
-                      <span>{analysis.totalDocs.toLocaleString()} HCPs</span>
-                      <span className="centroid-sep">·</span>
-                      <span>{analysis.allInRadius.length} metros</span>
-                      <span className="centroid-sep">·</span>
-                      <span>{radius} mi radius</span>
-                    </div>
-                    {analysis.topSpecs && (
-                      <div className="centroid-callout-mix">
-                        Expect {analysis.topSpecs.join(", ")} practitioners
-                      </div>
-                    )}
-                    {analysis.closestComparison && (
-                      <div className="centroid-callout-comparison">
-                        Nearest comparison: {analysis.closestComparison.metro.city} ({Math.round(analysis.closestComparison.distance)} mi)
-                      </div>
-                    )}
-                    <div className="centroid-callout-pointer" />
-                  </div>
-                </foreignObject>
-              )}
             </g>
           </svg>
+
+          {/* Centroid callout — HTML overlay anchored to centroid screen position */}
+          {centroidScreenPos && analysis && (
+            <div
+              className="centroid-callout"
+              style={{
+                position: "absolute",
+                left: centroidScreenPos.x + 18,
+                top: centroidScreenPos.y - 90,
+              }}
+            >
+              <div className="centroid-callout-title">
+                🎯 Optimal {activeSpecialty === "All Specialties" ? "" : activeSpecialty + " "}Event Location
+              </div>
+              <div className="centroid-callout-body">
+                For a <strong>{activeSpecialty.toLowerCase()}</strong> event near{" "}
+                <strong>{analysis.origin.city}</strong>, host near{" "}
+                <span className="centroid-coords">
+                  {analysis.centroid.lat.toFixed(4)}°N, {Math.abs(analysis.centroid.lng).toFixed(4)}°W
+                </span>
+              </div>
+              <div className="centroid-callout-stats">
+                <span>{analysis.totalDocs.toLocaleString()} HCPs</span>
+                <span className="centroid-sep">·</span>
+                <span>{analysis.allInRadius.length} metros</span>
+                <span className="centroid-sep">·</span>
+                <span>{radius} mi radius</span>
+              </div>
+              {analysis.topSpecs && (
+                <div className="centroid-callout-mix">
+                  Expect {analysis.topSpecs.join(", ")} practitioners
+                </div>
+              )}
+              {analysis.closestComparison && (
+                <div className="centroid-callout-comparison">
+                  Nearest comparison: {analysis.closestComparison.metro.city} ({Math.round(analysis.closestComparison.distance)} mi)
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Zoom hint */}
           <div className="map-hint">
