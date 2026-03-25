@@ -608,15 +608,16 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 145, 0, 0.3);
   border-radius: var(--radius);
-  padding: 14px 16px 18px;
+  padding: 14px 16px 14px;
   color: var(--text);
   font-family: var(--font);
-  position: relative;
+  position: absolute;
+  z-index: 20;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 145, 0, 0.1);
   pointer-events: none;
-  min-width: 280px;
+  min-width: 260px;
   width: max-content;
-  max-width: 340px;
+  max-width: 320px;
 }
 
 .centroid-callout-pointer {
