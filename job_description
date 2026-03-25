@@ -1,0 +1,29 @@
+ this is the job description.  About the job
+MedscapeLIVE!, a Medscape Company, delivers MD and HCP audiences across all therapeutic areas. Access MDs and HCPs through MedscapeLIVE! Events.
+ WebMD is an Equal Opportunity/Affirmative Action employer and does not discriminate on the basis of race, ancestry, color, religion, sex, gender, age, marital status, sexual orientation, gender identity, national origin, medical condition, disability, veterans status, or any other basis protected by law.
+
+Pre-Sale/Post Sale Responsibilities
+Conduct audience analysis using prescribing trends, specialty data, geography, and practice type.
+Build segmented target lists (HCPs, hospitals, community practices, IDNs).
+Identify high-value regions and clinical hotspots for event placement.
+Evaluate competitor presence, market saturation, and opportunity gaps.
+Support sales with data-driven recommendations for event formats, locations, and audience mix.
+Forecast potential attendance using historical data, specialty density, and engagement benchmarks.
+Analyze local healthcare ecosystems to recommend partnered venues (hospitals, cancer centers, specialty groups).
+Partner with PM/AE teams to validate feasibility and alignment with client KPIs.
+Research and score potential partnered venues (hospitals, professional societies, academic centers).
+Map local networks to identify optimal event footprint.
+Measure engagement performance vs. benchmarks and client KPIs.
+Assess venue performance and recommend future location strategy.
+Identify trends in clinician behavior, attendance patterns, and educational demand.
+Deliver executive summaries with actionable insights for continuous improvement.
+Cross-Functional Collaboration
+Support Sales, PM, and AE teams with data insights to improve accuracy of pre-sale commitments.
+Inform marketing on audience needs, segmentation intelligence, and targeting refinements.
+Collaborate with event operations and client services to ensure data alignment from planning through reporting.
+Partner with hospital/venue relations teams to enhance local engagement strategies.
+Tools & Skills
+Proficiency in CRM, marketing analytics tools, data visualization platforms (Tableau/Power BI), and segmentation systems.
+Strong understanding of HCP databases, NPI taxonomy, and healthcare market dynamics.
+Ability to translate data insights into clear recommendations for client-facing teams.
+Comfortable working in fast-paced environments with multiple concurrent events.  the point of this project is something like this: if i go to codex can it view the public url and help me with those things? and id like to be able to click on a city, zoom in on it and do the Haversine angle thing to pick a spot where doctors are more likely to attend? and the rest of this? don't give code just tell me if its possible. You’re not forecasting “markets” like Kalshi—you’re forecasting real-world behavior of doctors (HCPs) and how they’ll respond to events. Here’s exactly what you’d be predicting, step by step: 1) Event Attendance (core forecast) You are predicting: How many doctors will show up to an event Who specifically is likely to attend What type of doctors (specialty, prescribing behavior, etc.) Example: “If we host an oncology dinner in Chicago → ~45 oncologists will attend” What drives that prediction: Historical attendance from similar events Density of that specialty in the area Past engagement rates 2) Audience Quality (not just quantity) You’re forecasting: How valuable the attendees will be to the client Example: Not just “45 doctors,” but: How many are high-prescribers How many are decision-makers (vs junior staff) 3) Geographic Performance You are predicting: Which locations will perform best for a given topic Example: “Houston > Chicago for cardiology turnout” “This ZIP code cluster has the highest concentration of target HCPs” This is where your “footprint” logic comes in (like your Haversine idea): You’re optimizing where to place the event to maximize turnout 4) Venue Effectiveness You’re forecasting: Which venues will drive higher attendance Example: “Hospital-based event → higher credibility → higher turnout” “Private restaurant → lower turnout but better engagement” 5) Engagement + Outcome Forecasting After attendance, you’re predicting: How engaged attendees will be Whether they’ll take action (e.g., prescribe a drug) Example: “Endocrinology events typically drive 15–20% post-event prescribing lift” 6) Market Opportunity / Gap Analysis You are predicting: Where there is untapped demand Example: “This region has many neurologists but low event saturation → high opportunity” 7) Competitive Impact You’re forecasting: How competitor activity affects your event Example: “If competitor X has already saturated this region → lower turnout expected” 8) Event Strategy Recommendations (your output) All your forecasts lead to decisions like: Where to host the event What format (dinner, conference, webinar) Who to invite Expected turnout and ROI In one sentence: You are predicting “If we host THIS type of event, in THIS location, targeting THESE doctors → how many will come, how valuable they’ll be, and how effective the event will be.” How to explain it in the interview (simple version): “I’d be forecasting HCP attendance and engagement by combining historical event performance, physician density, and specialty data to determine the optimal location, audience, and format for each event.” If you want next step, I can turn this into: exact interview answer or a technical explanation using data + math (like your Haversine angle).  
