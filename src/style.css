@@ -302,6 +302,98 @@ body {
   pointer-events: none;
 }
 
+/* ===== View Mode Toggle ===== */
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid var(--border);
+}
+
+.view-toggle-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.view-toggle-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.view-toggle-btn.active {
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-glow);
+}
+
+/* ===== Signal Legend ===== */
+.signal-legend {
+  gap: 14px;
+}
+
+.legend-dot-glow {
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.5), 0 0 12px rgba(255, 215, 0, 0.2);
+}
+
+.legend-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.legend-item-dim {
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+}
+
+/* ===== Prescriber Tooltip ===== */
+.prescriber-tooltip {
+  max-width: 320px;
+}
+
+.tooltip-signal-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.tooltip-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.tooltip-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.tooltip-company {
+  font-size: 11px;
+  color: var(--text);
+  padding: 2px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .topbar { padding: 10px 16px; }

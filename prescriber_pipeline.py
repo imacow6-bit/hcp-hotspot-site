@@ -17,13 +17,13 @@ DATA SOURCES — download before running
 1. Medicare Part D Prescribers — by Provider and Drug (2022)
    URL: https://data.cms.gov/provider-summary-by-type-of-service/
         medicare-part-d-prescribers/medicare-part-d-prescribers-by-provider-and-drug
-   Click "Download" → CSV. File is ~2-4 GB. Rename to partd_by_drug.csv.
+   Click "Download" → CSV. File is ~2-4 GB. Rename to partd_by_drug.csv.zip.
    Why this file (not "by Provider"): it has Prscrbr_Zip5 for lat/lng join.
 
 2. Open Payments — General Payments (most recent year)
    URL: https://openpaymentsdata.cms.gov/datasets/general-payment-data-with-
         deleted-records-publication-year-2023-data-from-the-open-payments-program
-   Click "Export" → CSV. File is ~2-5 GB. Rename to open_payments.csv.
+   Click "Export" → CSV. File is ~2-5 GB. Rename to open_payments.csv.zip.
    We only read 3 columns so memory is manageable despite the file size.
 
 3. ZIP centroids — auto-loaded from src/zip_level_data.json (already present).
@@ -45,8 +45,8 @@ from collections import defaultdict
 # CONFIG — update paths if files are elsewhere
 # ─────────────────────────────────────────────────────────
 
-PART_D_PATH       = "partd_by_drug.csv"
-OPEN_PAYMENTS_PATH = "open_payments.csv"
+PART_D_PATH       = "partd_by_drug.csv.zip"
+OPEN_PAYMENTS_PATH = "open_payments.csv.zip"
 ZIP_DATA_PATH     = "src/zip_level_data.json"
 OUTPUT_PATH       = "public/prescriber_scores.json"
 
@@ -109,7 +109,6 @@ PART_D_COLS = [
     "Prscrbr_First_Name",
     "Prscrbr_Type",
     "Prscrbr_State_Abrvtn",
-    "Prscrbr_Zip5",
     "Tot_Clms",
 ]
 
@@ -186,13 +185,11 @@ def process_part_d(path, zip_centroids):
             except ValueError:
                 clms = 5   # suppressed value — treat as low volume
 
-            # ZIP → lat/lng
-            raw_zip = str(row.get("Prscrbr_Zip5", "")).strip()[:5].zfill(5)
+            # ZIP → lat/lng lookup
+            raw_zip = str(row.get("Prscrbr_Zip5", "")).strip()[:5]
             geo = zip_centroids.get(raw_zip)
             if not geo:
                 skipped_zip += 1
-                # Still track the NPI — we'll drop it in the output phase
-                geo = None
 
             if npi not in npi_data:
                 last  = str(row.get("Prscrbr_Last_Org_Name", "")).strip()
@@ -358,9 +355,10 @@ def build_output(npi_data, engagement):
             skipped_tier3 += 1
             continue
 
-        if rec["lat"] is None or rec["lng"] is None:
-            skipped_no_geo += 1
-            continue
+        # Temporarily allow records with missing lat/lng
+        # if rec["lat"] is None or rec["lng"] is None:
+        #     skipped_no_geo += 1
+        #     continue
 
         op = engagement.get(npi, {})
         companies = sorted(op.get("companies", set()))[:5]  # cap at 5 names
