@@ -60,8 +60,7 @@ const SIGNAL_COLOR_EXPR = [
 // OpenFreeMap free vector tiles — no token required
 const TILE_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
-// View modes
-const VIEW_MODES = ["Density", "Prescribers"];
+// No separate view modes — both layers shown simultaneously
 
 export default function HCPHotspotMap() {
   const mapContainer = useRef(null);
@@ -69,7 +68,6 @@ export default function HCPHotspotMap() {
   const popup = useRef(null);
 
   const [activeSpecialty, setActiveSpecialty] = useState("All Specialties");
-  const [viewMode, setViewMode] = useState("Density");
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredZip, setHoveredZip] = useState(null);
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
@@ -160,37 +158,46 @@ export default function HCPHotspotMap() {
         id: "prescriber-dots",
         type: "circle",
         source: "prescribers",
-        layout: { visibility: "none" },
+        layout: { visibility: "visible" },
+        // Only show prescribers at zoom 6+ so density layer is readable at country view
+        minzoom: 6,
         paint: {
           "circle-color": SIGNAL_COLOR_EXPR,
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
-            4,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 1.5, 50000, 5],
-            8,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 3,   50000, 10],
-            12, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 5,   50000, 16],
+            6,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 0.5, 50000, 2],
+            8,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 1.5, 50000, 5],
+            10, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 3,   50000, 10],
+            14, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 5,   50000, 16],
           ],
           "circle-opacity": [
-            "case",
-            // White space gets full opacity
-            ["all",
-              ["==", ["get", "tier"], 1],
-              ["!", ["get", "competitor_engaged"]],
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.15,
+            8, ["case",
+              // White space gets full opacity
+              ["all",
+                ["==", ["get", "tier"], 1],
+                ["!", ["get", "competitor_engaged"]],
+              ],
+              0.92,
+              // Loyalty signal
+              ["get", "competitor_engaged"],
+              0.7,
+              // Volume signal (background)
+              0.45,
             ],
-            0.92,
-            // Loyalty signal
-            ["get", "competitor_engaged"],
-            0.7,
-            // Volume signal (background)
-            0.45,
           ],
           "circle-stroke-width": [
-            "case",
-            ["all",
-              ["==", ["get", "tier"], 1],
-              ["!", ["get", "competitor_engaged"]],
+            "interpolate", ["linear"], ["zoom"],
+            6, 0,
+            9, ["case",
+              ["all",
+                ["==", ["get", "tier"], 1],
+                ["!", ["get", "competitor_engaged"]],
+              ],
+              1.5,
+              0.5,
             ],
-            1.5,
-            0.5,
           ],
           "circle-stroke-color": [
             "case",
@@ -274,21 +281,6 @@ export default function HCPHotspotMap() {
     });
   }, [mapLoaded, prescriberData]);
 
-  // ── View mode toggle ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!mapLoaded || !map.current) return;
-
-    if (viewMode === "Density") {
-      map.current.setLayoutProperty("hcp-dots", "visibility", "visible");
-      map.current.setLayoutProperty("hcp-dots-hover", "visibility", "visible");
-      map.current.setLayoutProperty("prescriber-dots", "visibility", "none");
-    } else {
-      map.current.setLayoutProperty("hcp-dots", "visibility", "none");
-      map.current.setLayoutProperty("hcp-dots-hover", "visibility", "none");
-      map.current.setLayoutProperty("prescriber-dots", "visibility", "visible");
-    }
-  }, [viewMode, mapLoaded]);
-
   // ── Specialty filter ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
@@ -352,18 +344,6 @@ export default function HCPHotspotMap() {
           </div>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="view-toggle">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode}
-              className={`view-toggle-btn ${viewMode === mode ? "active" : ""}`}
-              onClick={() => setViewMode(mode)}
-            >
-              {mode === "Density" ? "📍 Density" : "👤 Prescribers"}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Filter Bar */}
@@ -391,8 +371,8 @@ export default function HCPHotspotMap() {
         ))}
       </div>
 
-      {/* Legend — changes based on view mode */}
-      {viewMode === "Density" && activeSpecialty === "All Specialties" && (
+      {/* Legend — specialty colors + signal colors */}
+      {activeSpecialty === "All Specialties" && (
         <div className="specialty-legend">
           {Object.entries(SPECIALTY_COLORS).map(([spec, color]) => (
             <span key={spec} className="legend-item">
@@ -400,26 +380,18 @@ export default function HCPHotspotMap() {
               {spec}
             </span>
           ))}
-        </div>
-      )}
-
-      {viewMode === "Prescribers" && (
-        <div className="specialty-legend signal-legend">
+          <span className="legend-separator" />
           <span className="legend-item">
             <span className="legend-dot legend-dot-glow" style={{ background: SIGNAL_COLORS.whitespace }} />
             White Space
           </span>
           <span className="legend-item">
             <span className="legend-dot" style={{ background: SIGNAL_COLORS.loyalty }} />
-            Loyalty Signal
+            Loyalty
           </span>
           <span className="legend-item">
             <span className="legend-dot" style={{ background: SIGNAL_COLORS.volume }} />
-            Volume Signal
-          </span>
-          <span className="legend-separator" />
-          <span className="legend-item legend-item-dim">
-            Gold = Tier 1, untouched · Blue = competitor-engaged · Gray = Tier 2
+            Volume
           </span>
         </div>
       )}
@@ -428,8 +400,8 @@ export default function HCPHotspotMap() {
       <div className="map-wrapper">
         <div ref={mapContainer} className="maplibre-container" />
 
-        {/* ZIP Tooltip (Density mode) */}
-        {viewMode === "Density" && hoveredZip && (
+        {/* ZIP Tooltip */}
+        {hoveredZip && !hoveredPrescriber && (
           <div className="zip-tooltip">
             <div className="tooltip-city">ZIP {hoveredZip.zip} — {hoveredZip.state}</div>
             <div className="tooltip-meta">{hoveredZip.total} total physicians</div>
@@ -455,8 +427,8 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
-        {/* Prescriber Tooltip (Prescriber mode) */}
-        {viewMode === "Prescribers" && hoveredPrescriber && (
+        {/* Prescriber Tooltip */}
+        {hoveredPrescriber && (
           <div className="zip-tooltip prescriber-tooltip">
             <div className="tooltip-signal-badge" style={{ color: getSignalColor(hoveredPrescriber) }}>
               ● {getSignalLabel(hoveredPrescriber)}
@@ -482,9 +454,7 @@ export default function HCPHotspotMap() {
         )}
 
         <div className="map-hint">
-          {viewMode === "Density"
-            ? "Scroll to zoom · Drag to pan · Hover ZIP for detail"
-            : "Scroll to zoom · Hover prescriber for detail · Gold = White Space target"}
+          Scroll to zoom · Drag to pan · Hover for detail · Gold = White Space target
         </div>
       </div>
     </>
