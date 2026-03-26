@@ -420,24 +420,6 @@ body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
-/* ===== Event Location Callout ===== */
-.event-location-callout {
-  position: absolute;
-  bottom: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 215, 0, 0.4);
-  border-radius: var(--radius);
-  padding: 12px 20px;
-  text-align: center;
-  z-index: 100;
-  pointer-events: none;
-  box-shadow: 0 0 24px rgba(255, 215, 0, 0.15), 0 8px 32px rgba(0, 0, 0, 0.4);
-  white-space: nowrap;
-}
 
 .callout-title {
   font-size: 13px;
@@ -557,6 +539,46 @@ body {
   color: var(--cyan) !important;
   background: rgba(0, 229, 255, 0.15) !important;
   box-shadow: 0 0 12px var(--cyan-glow), inset 0 0 10px rgba(0, 229, 255, 0.05) !important;
+}
+
+/* ===== Draw Circle Prompt ===== */
+.draw-prompt {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  max-width: 300px;
+  z-index: 5;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.draw-prompt-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-bottom: 6px;
+}
+
+.draw-prompt-text {
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.draw-prompt-warn {
+  font-size: 10px;
+  color: var(--orange);
+  line-height: 1.45;
+  padding: 6px 8px;
+  background: rgba(255, 145, 0, 0.08);
+  border-radius: 6px;
+  border-left: 2px solid var(--orange);
 }
 
 /* ===== Draw Mode Hint ===== */

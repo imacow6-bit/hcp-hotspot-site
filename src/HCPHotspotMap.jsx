@@ -242,7 +242,6 @@ function makeStarImage(size = 22, fillColor = "#FFD700") {
 export default function HCPHotspotMap() {
   const mapContainer = useRef(null);
   const map = useRef(null);
-  const eventMarkerRef = useRef(null);
   const clusterMarkersRef = useRef([]);
 
   const [activeSpecialty, setActiveSpecialty] = useState("All Specialties");
@@ -251,7 +250,6 @@ export default function HCPHotspotMap() {
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
   const [prescriberData, setPrescriberData] = useState(null);
   const [stats, setStats] = useState(null);
-  const [viewportCentroid, setViewportCentroid] = useState(null);
   const [hotspots, setHotspots] = useState([]);
   const [drawMode, setDrawMode] = useState(false);
   const [lassoCircle, setLassoCircle] = useState(null);
@@ -273,10 +271,9 @@ export default function HCPHotspotMap() {
       .catch(() => setPrescriberData([]));
   }, []);
 
-  // ── Compute viewport-based centroid + hotspots ────────────────────────────────
+  // ── Compute viewport hotspots ───────────────────────────────────────────────
   const updateViewportAnalysis = useCallback(() => {
     if (!prescriberData || !map.current) {
-      setViewportCentroid(null);
       setHotspots([]);
       return;
     }
@@ -295,21 +292,9 @@ export default function HCPHotspotMap() {
         (activeSpecialty === "All Specialties" || p.specialty === activeSpecialty)
     );
     if (pts.length === 0) {
-      setViewportCentroid(null);
       setHotspots([]);
       return;
     }
-    // Weighted centroid of visible targets
-    let wLat = 0, wLng = 0, totalW = 0;
-    for (const p of pts) {
-      const w = p.tot_clms || 1;
-      wLat += p.lat * w;
-      wLng += p.lng * w;
-      totalW += w;
-    }
-    setViewportCentroid({ lat: wLat / totalW, lng: wLng / totalW, count: pts.length });
-
-    // Cluster analysis — scale eps with zoom
     const zoom = map.current.getZoom();
     const epsKm = zoom >= 10 ? 8 : zoom >= 7 ? 20 : 40;
     const minPts = zoom >= 10 ? 3 : 5;
@@ -774,25 +759,6 @@ export default function HCPHotspotMap() {
     }
   }, [activeSpecialty, mapLoaded]);
 
-  // ── Event location marker (viewport centroid) ──────────────────────────────
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-
-    if (eventMarkerRef.current) {
-      eventMarkerRef.current.remove();
-      eventMarkerRef.current = null;
-    }
-    if (!viewportCentroid) return;
-
-    const el = document.createElement("div");
-    el.className = "event-location-marker";
-    el.textContent = "📍";
-
-    eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
-      .setLngLat([viewportCentroid.lng, viewportCentroid.lat])
-      .addTo(map.current);
-  }, [viewportCentroid, mapLoaded]);
-
   // ── Hotspot cluster markers ────────────────────────────────────────────────
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -991,37 +957,35 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
-        {/* Optimal Event Location callout — viewport-based */}
-        {viewportCentroid && (
-          <div className="event-location-callout">
-            <div className="callout-title">📍 Optimal Event Location (this region)</div>
-            <div className="callout-meta">
-              {viewportCentroid.count.toLocaleString()} visible Tier 1 targets
-              {activeSpecialty !== "All Specialties" ? ` · ${activeSpecialty}` : ""}
-            </div>
-            <div className="callout-coords">
-              {viewportCentroid.lat.toFixed(3)}°N, {Math.abs(viewportCentroid.lng).toFixed(3)}°W
-            </div>
-            <div className="callout-hint">Pan/zoom to update region</div>
-          </div>
-        )}
-
-        {/* Lasso circle result callout */}
+        {/* Lasso result — optimal event location */}
         {lassoCircle && (
           <div className="lasso-callout">
-            <div className="callout-title">◎ Circle Selection — {lassoCircle.radiusKm.toFixed(1)}km radius</div>
+            <div className="callout-title">📍 Optimal Event Location — {lassoCircle.radiusKm.toFixed(1)}km radius</div>
             {lassoCircle.centroid ? (
               <>
                 <div className="callout-meta">
                   {lassoCircle.targets} Tier 1 targets · {lassoCircle.totalClaims.toLocaleString()} claims
                 </div>
                 <div className="callout-coords">
-                  Optimal location: {lassoCircle.centroid.lat.toFixed(3)}°N, {Math.abs(lassoCircle.centroid.lng).toFixed(3)}°W
+                  {lassoCircle.centroid.lat.toFixed(3)}°N, {Math.abs(lassoCircle.centroid.lng).toFixed(3)}°W
                 </div>
               </>
             ) : (
               <div className="callout-meta">No Tier 1 targets in this area</div>
             )}
+          </div>
+        )}
+
+        {/* Draw circle prompt — shown when no lasso is active and not in draw mode */}
+        {!lassoCircle && !drawMode && (
+          <div className="draw-prompt">
+            <div className="draw-prompt-title">◎ Find Optimal Event Location</div>
+            <div className="draw-prompt-text">
+              Draw a circle around an area to find the optimal event location filtered by distance of all Tier 1 targets within that area.
+            </div>
+            <div className="draw-prompt-warn">
+              If you draw the circle too large, the result will just be an aggregate of a huge area and not useful. Works best at the suburb level.
+            </div>
           </div>
         )}
 
