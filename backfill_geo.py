@@ -1,16 +1,57 @@
 """
 Backfill prescriber_scores.json with city-level coordinates.
-Reads NPI -> city from Part D, then geocodes using embedded US city data.
+Reads NPI -> city from Part D, then geocodes using uscities.csv (real coordinates).
 """
 import json, csv, zipfile, random, os
 from collections import defaultdict
 
 random.seed(42)
 
-print("=== Prescriber Geo-Backfill (City-Level) ===\n")
+print("=== Prescriber Geo-Backfill (Real City Coordinates) ===\n")
 
-# ─── Step 1: Build NPI → (city, state) from Part D ───────────────────────────
-print("[1/3] Reading Part D for NPI → city mapping...")
+# ─── Step 1: Load uscities.csv → (CITY_UPPER, STATE) → (lat, lng) ────────────
+print("[1/4] Loading uscities.csv city geocoder...")
+
+# Common abbreviations in CMS data → full form in uscities.csv
+CITY_ALIASES = {
+    "ST ": "SAINT ",
+    "ST. ": "SAINT ",
+    "FT ": "FORT ",
+    "FT. ": "FORT ",
+    "MT ": "MOUNT ",
+    "MT. ": "MOUNT ",
+    "N ": "NORTH ",
+    "S ": "SOUTH ",
+    "E ": "EAST ",
+    "W ": "WEST ",
+}
+
+def normalize_city(name):
+    """Normalize city name for matching: uppercase, expand abbreviations."""
+    name = name.strip().upper()
+    # Expand leading abbreviations
+    for abbr, full in CITY_ALIASES.items():
+        if name.startswith(abbr):
+            name = full + name[len(abbr):]
+            break
+    return name
+
+city_coords = {}  # (CITY_UPPER, STATE) → (lat, lng)
+with open("uscities.csv", newline="") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        city = normalize_city(row["CITY"])
+        state = row["STATE_CODE"].strip().upper()
+        lat = float(row["LATITUDE"])
+        lng = float(row["LONGITUDE"])
+        key = (city, state)
+        if key not in city_coords:
+            city_coords[key] = (lat, lng)
+
+print(f"  Loaded {len(city_coords):,} unique (city, state) pairs")
+
+# ─── Step 2: Build NPI → (city, state) from Part D ───────────────────────────
+print("\n[2/4] Reading Part D for NPI → city mapping...")
 npi_city = {}
 rows_read = 0
 with zipfile.ZipFile("partd_by_drug.csv.zip") as zf:
@@ -31,104 +72,87 @@ with zipfile.ZipFile("partd_by_drug.csv.zip") as zf:
 
 print(f"  Done: {rows_read:,} rows → {len(npi_city):,} NPI city mappings")
 
-# ─── Step 2: Build city geocoder from zip_level_data.json ─────────────────────
-# Our ZIP data doesn't have city names, so we need another approach.
-# Strategy: use the Part D Provider Summary file which has NPI + ZIP...
-# Actually, simplest: build a state → [(lat,lng)] scatter from zip_level_data 
-# and then use the CITY NAME to create deterministic placement.
-# 
-# Better approach: Map each unique (city,state) pair to a deterministic coordinate
-# by hashing the city name into a position within the state's bounding box.
-
-print("\n[2/3] Building geo lookup from ZIP centroids...")
+# ─── Step 3: Build state centroids as last-resort fallback ────────────────────
+print("\n[3/4] Building state centroids (fallback only)...")
 
 with open("src/zip_level_data.json") as f:
     zip_data = json.load(f)
 
-# Build state bounding boxes
-state_bounds = defaultdict(lambda: {
-    "min_lat": 90, "max_lat": -90,
-    "min_lng": 180, "max_lng": -180,
-    "center_lat": 0, "center_lng": 0,
-    "count": 0
-})
-
+state_center = defaultdict(lambda: {"lat_sum": 0, "lng_sum": 0, "count": 0})
 for z in zip_data:
-    s = state_bounds[z["state"]]
-    s["min_lat"] = min(s["min_lat"], z["lat"])
-    s["max_lat"] = max(s["max_lat"], z["lat"])
-    s["min_lng"] = min(s["min_lng"], z["lng"])
-    s["max_lng"] = max(s["max_lng"], z["lng"])
-    s["center_lat"] += z["lat"]
-    s["center_lng"] += z["lng"]
+    s = state_center[z["state"]]
+    s["lat_sum"] += z["lat"]
+    s["lng_sum"] += z["lng"]
     s["count"] += 1
 
-for s in state_bounds.values():
-    s["center_lat"] /= s["count"]
-    s["center_lng"] /= s["count"]
+state_centroids = {}
+for st, s in state_center.items():
+    state_centroids[st] = (s["lat_sum"] / s["count"], s["lng_sum"] / s["count"])
 
-print(f"  Built bounding boxes for {len(state_bounds)} states")
+print(f"  Built centroids for {len(state_centroids)} states")
 
-def city_to_coords(city, state):
-    """Deterministically map a city name to a coordinate within its state."""
-    bounds = state_bounds.get(state)
-    if not bounds:
-        return None
-    
-    # Use hash of city name to create a deterministic but distributed position
-    # within the state's bounding box (inner 70% to avoid edge placement)
-    h = hash(city)
-    lat_range = bounds["max_lat"] - bounds["min_lat"]
-    lng_range = bounds["max_lng"] - bounds["min_lng"]
-    
-    # Use different bits of the hash for lat and lng
-    lat_frac = ((h & 0xFFFF) / 0xFFFF)  # 0..1
-    lng_frac = (((h >> 16) & 0xFFFF) / 0xFFFF)  # 0..1
-    
-    # Place within inner 70% of bounding box
-    margin = 0.15
-    lat = bounds["min_lat"] + lat_range * (margin + lat_frac * (1 - 2 * margin))
-    lng = bounds["min_lng"] + lng_range * (margin + lng_frac * (1 - 2 * margin))
-    
-    return (lat, lng)
-
-# ─── Step 3: Patch prescriber_scores.json ─────────────────────────────────────
-print("\n[3/3] Patching prescriber_scores.json...")
+# ─── Step 4: Patch prescriber_scores.json ─────────────────────────────────────
+print("\n[4/4] Patching prescriber_scores.json with real coordinates...")
 
 with open("public/prescriber_scores.json") as f:
     prescribers = json.load(f)
 
 print(f"  Loaded {len(prescribers):,} prescribers")
 
-matched = 0
-fallback = 0
+exact_match = 0
+normalized_match = 0
+state_fallback = 0
 dropped = 0
+
+def lookup_city(city_raw, state):
+    """Try to find real coordinates for a city. Returns (lat, lng) or None."""
+    # Exact match (already uppercase from Part D)
+    key = (city_raw, state)
+    if key in city_coords:
+        return city_coords[key]
+
+    # Normalized match (expand abbreviations)
+    norm = normalize_city(city_raw)
+    key_norm = (norm, state)
+    if key_norm in city_coords:
+        return city_coords[key_norm]
+
+    # Try without hyphens/periods
+    cleaned = norm.replace("-", " ").replace(".", "")
+    key_clean = (cleaned, state)
+    if key_clean in city_coords:
+        return city_coords[key_clean]
+
+    return None
 
 for p in prescribers:
     npi = str(p.get("npi", ""))
     city_state = npi_city.get(npi)
-    
+
     if city_state:
-        city, state = city_state
-        coords = city_to_coords(city, state)
+        city_raw, state = city_state
+        coords = lookup_city(city_raw, state)
+
         if coords:
-            # Small jitter so prescribers in the same city don't stack
-            jitter_lat = random.uniform(-0.02, 0.02)
-            jitter_lng = random.uniform(-0.025, 0.025)
+            # Real city coordinates + small jitter for metro spread
+            jitter_lat = random.gauss(0, 0.012)  # ~0.8 mile std dev
+            jitter_lng = random.gauss(0, 0.015)
             p["lat"] = round(coords[0] + jitter_lat, 4)
             p["lng"] = round(coords[1] + jitter_lng, 4)
-            matched += 1
+            p["city"] = city_raw.title()  # Save city name for future use
+            if (city_raw, state) in city_coords:
+                exact_match += 1
+            else:
+                normalized_match += 1
             continue
-    
-    # Fallback: use state center with wider jitter
+
+    # Last-resort fallback: state centroid with wider jitter
     state = p.get("state", "")
-    bounds = state_bounds.get(state)
-    if bounds:
-        lat_range = bounds["max_lat"] - bounds["min_lat"]
-        lng_range = bounds["max_lng"] - bounds["min_lng"]
-        p["lat"] = round(bounds["center_lat"] + random.uniform(-0.3, 0.3) * lat_range, 4)
-        p["lng"] = round(bounds["center_lng"] + random.uniform(-0.3, 0.3) * lng_range, 4)
-        fallback += 1
+    centroid = state_centroids.get(state)
+    if centroid:
+        p["lat"] = round(centroid[0] + random.gauss(0, 0.15), 4)
+        p["lng"] = round(centroid[1] + random.gauss(0, 0.18), 4)
+        state_fallback += 1
     else:
         dropped += 1
 
@@ -137,8 +161,14 @@ with open("public/prescriber_scores.json", "w") as f:
     json.dump(prescribers, f, separators=(",", ":"))
 
 size_mb = os.path.getsize("public/prescriber_scores.json") / 1_000_000
-print(f"\nDone!")
-print(f"  City-matched:    {matched:,}")
-print(f"  State-fallback:  {fallback:,}")
-print(f"  Dropped:         {dropped:,}")
+total_real = exact_match + normalized_match
+pct = total_real / len(prescribers) * 100
+
+print(f"\n{'='*50}")
+print(f"  Exact city match:    {exact_match:,}")
+print(f"  Normalized match:    {normalized_match:,}")
+print(f"  → Total real coords: {total_real:,} ({pct:.1f}%)")
+print(f"  State fallback:      {state_fallback:,}")
+print(f"  Dropped:             {dropped:,}")
 print(f"  Output: public/prescriber_scores.json ({size_mb:.1f} MB)")
+print(f"{'='*50}")
