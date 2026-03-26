@@ -246,7 +246,6 @@ export default function HCPHotspotMap() {
   const clusterMarkersRef = useRef([]);
 
   const [activeSpecialty, setActiveSpecialty] = useState("All Specialties");
-  const [showTier1Only, setShowTier1Only] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredZip, setHoveredZip] = useState(null);
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
@@ -275,7 +274,7 @@ export default function HCPHotspotMap() {
 
   // ── Compute viewport-based centroid + hotspots ────────────────────────────────
   const updateViewportAnalysis = useCallback(() => {
-    if (!prescriberData || !showTier1Only || !map.current) {
+    if (!prescriberData || !map.current) {
       setViewportCentroid(null);
       setHotspots([]);
       return;
@@ -315,7 +314,7 @@ export default function HCPHotspotMap() {
     const minPts = zoom >= 10 ? 3 : 5;
     const clusters = findClusters(pts, epsKm, minPts);
     setHotspots(clusters.slice(0, 8));
-  }, [prescriberData, showTier1Only, activeSpecialty]);
+  }, [prescriberData, activeSpecialty]);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -666,20 +665,16 @@ export default function HCPHotspotMap() {
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
 
-    // Layer base filters
+    // Layer base filters — stars and squares always visible
     const wsBase = ["all", ["==", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]];
-    const circleBase = ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]];
-    // When Tier 1 Only: circles show only tier-1 loyalty (competitor_engaged tier-1)
-    const circleWhenTier1 = ["all", ["get", "competitor_engaged"], ["==", ["get", "tier"], 1]];
-
-    const circleFilter = showTier1Only ? circleWhenTier1 : circleBase;
+    const squareBase = ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]];
 
     if (activeSpecialty === "All Specialties") {
-      map.current.setFilter("prescriber-dots", circleFilter);
+      map.current.setFilter("prescriber-dots", squareBase);
       map.current.setFilter("tier1-stars", wsBase);
     } else {
       const specExpr = ["==", ["get", "specialty"], activeSpecialty];
-      map.current.setFilter("prescriber-dots", ["all", circleFilter, specExpr]);
+      map.current.setFilter("prescriber-dots", ["all", squareBase, specExpr]);
       map.current.setFilter("tier1-stars", ["all", wsBase, specExpr]);
     }
 
@@ -708,7 +703,7 @@ export default function HCPHotspotMap() {
         0.08,
       ]);
     }
-  }, [activeSpecialty, showTier1Only, mapLoaded]);
+  }, [activeSpecialty, mapLoaded]);
 
   // ── Event location marker (viewport centroid) ──────────────────────────────
   useEffect(() => {
@@ -737,7 +732,7 @@ export default function HCPHotspotMap() {
     for (const m of clusterMarkersRef.current) m.remove();
     clusterMarkersRef.current = [];
 
-    if (!showTier1Only || hotspots.length === 0) return;
+    if (hotspots.length === 0) return;
 
     hotspots.forEach((cluster, idx) => {
       const el = document.createElement("div");
@@ -754,7 +749,7 @@ export default function HCPHotspotMap() {
         .addTo(map.current);
       clusterMarkersRef.current.push(marker);
     });
-  }, [hotspots, showTier1Only, mapLoaded]);
+  }, [hotspots, mapLoaded]);
 
   // Signal label/color helpers
   const getSignalLabel = (p) => {
@@ -807,12 +802,6 @@ export default function HCPHotspotMap() {
           </button>
         ))}
         <span className="filter-divider" />
-        <button
-          className={`filter-btn tier1-btn ${showTier1Only ? "active" : ""}`}
-          onClick={() => setShowTier1Only((v) => !v)}
-        >
-          ★ Tier 1 Only
-        </button>
         <button
           className={`filter-btn draw-btn ${drawMode ? "active" : ""}`}
           onClick={() => {
