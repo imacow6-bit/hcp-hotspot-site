@@ -1035,7 +1035,11 @@ export default function HCPHotspotMap() {
             {zoomLevel < 5.5 ? (
               <>
                 <div className="onboarding-big">Scroll to Zoom In</div>
-                <div className="onboarding-sub">Explore prescriber data across the United States</div>
+                <div className="onboarding-description">
+                  <p>I pulled about 71,000 doctors from two public government databases — the CMS Open Payments database, which logs every dollar pharma companies pay to physicians, and the NPPES NPI Registry, which is basically the phone book for every licensed prescriber in the country.</p>
+                  <p>I ranked them all by how much they prescribe, then checked which ones competitors are already paying. Gold stars are the high-value doctors that nobody's reached out to yet. Blue squares are the ones competitors already have relationships with. Silver stars are lower-volume doctors who are still open.</p>
+                  <p>The whole point is to help sales teams figure out <strong>where to hold events</strong>. Instead of guessing which city to book a speaker dinner in, you can actually see where the untapped doctors are clustered. Draw a circle around a group and it'll suggest a central meeting spot. Turn on the heatmap and you can see which areas have the most opportunity at a glance.</p>
+                </div>
               </>
             ) : (
               <>
