@@ -194,6 +194,39 @@ function makeGeoCircle(lngCenter, latCenter, radiusKm, points = 64) {
   };
 }
 
+// ── Large pin canvas image for lasso centroid ────────────────────────────────
+function makePinImage(size = 40) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const cx = size / 2;
+  // Pin body
+  ctx.fillStyle = "#FF4444";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, size * 0.35, size * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Pin point
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.15, size * 0.55);
+  ctx.lineTo(cx, size * 0.9);
+  ctx.lineTo(cx + size * 0.15, size * 0.55);
+  ctx.fillStyle = "#FF4444";
+  ctx.fill();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Inner dot
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(cx, size * 0.35, size * 0.12, 0, Math.PI * 2);
+  ctx.fill();
+  return ctx.getImageData(0, 0, size, size);
+}
+
 // ── Blue square canvas image for competitor-engaged doctors ──────────────────
 function makeSquareImage(size = 24, fillColor = "#4FC3F7") {
   const canvas = document.createElement("canvas");
@@ -366,7 +399,7 @@ export default function HCPHotspotMap() {
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // ── Blue square layer: competitor-engaged / loyalty doctors ─────────────
+      // ── Blue square layer: competitor-engaged doctors only ──────────────────
       map.current.addImage("engaged-square", makeSquareImage(24, "#4FC3F7"), { sdf: false });
 
       map.current.addLayer({
@@ -374,7 +407,7 @@ export default function HCPHotspotMap() {
         type: "symbol",
         source: "prescribers",
         minzoom: 6,
-        filter: ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]],
+        filter: ["get", "competitor_engaged"],
         layout: {
           "icon-image": "engaged-square",
           "icon-size": [
@@ -391,13 +424,46 @@ export default function HCPHotspotMap() {
           "icon-opacity": [
             "interpolate", ["linear"], ["zoom"],
             6, 0.15,
-            8, ["case", ["get", "competitor_engaged"], 0.7, 0.45],
+            8, 0.7,
+          ],
+        },
+      });
+
+      // ── Silver star layer: Tier 2 (non-engaged, non-tier-1) ────────────────
+      map.current.addImage("tier2-star", makeStarImage(22, "#C0C0C0"), { sdf: false });
+
+      map.current.addLayer({
+        id: "tier2-stars",
+        type: "symbol",
+        source: "prescribers",
+        minzoom: 6,
+        filter: ["all", ["!=", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]],
+        layout: {
+          "icon-image": "tier2-star",
+          "icon-size": [
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.3,
+            9, 0.6,
+            12, 0.85,
+            14, 1.1,
+          ],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.1,
+            8, 0.5,
           ],
         },
       });
 
       // ── Gold star layer: Tier 1 targets ─────────────────────────────────────
       map.current.addImage("tier1-star", makeStarImage(22, "#FFD700"), { sdf: false });
+
+      // ── Large pin image for lasso centroid ──────────────────────────────────
+      map.current.addImage("lasso-pin", makePinImage(40), { sdf: false });
 
       // ── Lasso circle source + layer ─────────────────────────────────────────
       map.current.addSource("lasso-circle", {
@@ -560,6 +626,24 @@ export default function HCPHotspotMap() {
       setHoveredPrescriber(null);
     });
 
+    // ── Hover: Tier 2 silver stars ──────────────────────────────────────────
+    map.current.on("mousemove", "tier2-stars", (e) => {
+      map.current.getCanvas().style.cursor = "pointer";
+      const f = e.features[0];
+      if (!f) return;
+      const p = f.properties;
+      setHoveredPrescriber({
+        ...p,
+        companies: p.companies ? JSON.parse(p.companies) : [],
+        lngLat: e.lngLat,
+      });
+    });
+
+    map.current.on("mouseleave", "tier2-stars", () => {
+      map.current.getCanvas().style.cursor = "";
+      setHoveredPrescriber(null);
+    });
+
     // ── Draw-circle lasso interaction ──────────────────────────────────────
     let drawStart = null;
     map.current.on("mousedown", (e) => {
@@ -700,7 +784,7 @@ export default function HCPHotspotMap() {
     return () => window.removeEventListener("lasso-complete", handler);
   }, [prescriberData, activeSpecialty]);
 
-  // ── Lasso centroid marker ─────────────────────────────────────────────────
+  // ── Lasso centroid pin marker ────────────────────────────────────────────
   useEffect(() => {
     if (lassoMarkerRef.current) {
       lassoMarkerRef.current.remove();
@@ -708,8 +792,8 @@ export default function HCPHotspotMap() {
     }
     if (!map.current || !mapLoaded || !lassoCircle?.centroid) return;
     const el = document.createElement("div");
-    el.className = "event-location-marker";
-    el.textContent = "📍";
+    el.className = "lasso-pin-marker";
+    el.innerHTML = '<div class="lasso-pin-icon">📍</div><div class="lasso-pin-label">Optimal Location</div>';
     lassoMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
       .setLngLat([lassoCircle.centroid.lng, lassoCircle.centroid.lat])
       .addTo(map.current);
@@ -719,17 +803,20 @@ export default function HCPHotspotMap() {
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
 
-    // Layer base filters — stars and squares always visible
-    const wsBase = ["all", ["==", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]];
-    const squareBase = ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]];
+    // Layer base filters — all three layers always visible
+    const tier1Base = ["all", ["==", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]];
+    const tier2Base = ["all", ["!=", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]];
+    const engagedBase = ["get", "competitor_engaged"];
 
     if (activeSpecialty === "All Specialties") {
-      map.current.setFilter("prescriber-dots", squareBase);
-      map.current.setFilter("tier1-stars", wsBase);
+      map.current.setFilter("prescriber-dots", engagedBase);
+      map.current.setFilter("tier1-stars", tier1Base);
+      map.current.setFilter("tier2-stars", tier2Base);
     } else {
       const specExpr = ["==", ["get", "specialty"], activeSpecialty];
-      map.current.setFilter("prescriber-dots", ["all", squareBase, specExpr]);
-      map.current.setFilter("tier1-stars", ["all", wsBase, specExpr]);
+      map.current.setFilter("prescriber-dots", ["all", engagedBase, specExpr]);
+      map.current.setFilter("tier1-stars", ["all", tier1Base, specExpr]);
+      map.current.setFilter("tier2-stars", ["all", tier2Base, specExpr]);
     }
 
     // ── ZIP density paint ───────────────────────────────────────────────────
@@ -790,13 +877,19 @@ export default function HCPHotspotMap() {
   const getSignalLabel = (p) => {
     if (p.tier === 1 && !p.competitor_engaged) return "Tier 1 Target";
     if (p.competitor_engaged) return "Competitor Engaged";
-    return "Volume Signal";
+    return "Tier 2";
+  };
+
+  const getSignalIcon = (p) => {
+    if (p.tier === 1 && !p.competitor_engaged) return "★";
+    if (p.competitor_engaged) return "■";
+    return "★";
   };
 
   const getSignalColor = (p) => {
     if (p.tier === 1 && !p.competitor_engaged) return SIGNAL_COLORS.whitespace;
     if (p.competitor_engaged) return SIGNAL_COLORS.loyalty;
-    return SIGNAL_COLORS.volume;
+    return "#C0C0C0";
   };
 
   return (
@@ -890,6 +983,10 @@ export default function HCPHotspotMap() {
             &nbsp;Tier 1 Target
           </span>
           <span className="legend-item">
+            <span style={{ color: "#C0C0C0", fontSize: "14px", lineHeight: 1 }}>★</span>
+            &nbsp;Tier 2
+          </span>
+          <span className="legend-item">
             <span className="legend-square" style={{ background: SIGNAL_COLORS.loyalty }} />
             Competitor Engaged
           </span>
@@ -934,7 +1031,7 @@ export default function HCPHotspotMap() {
               className="tooltip-signal-badge"
               style={{ color: getSignalColor(hoveredPrescriber) }}
             >
-              {hoveredPrescriber.tier === 1 && !hoveredPrescriber.competitor_engaged ? "★" : "■"}{" "}
+              {getSignalIcon(hoveredPrescriber)}{" "}
               {getSignalLabel(hoveredPrescriber)}
             </div>
             <div className="tooltip-city">{hoveredPrescriber.name}</div>
@@ -960,7 +1057,7 @@ export default function HCPHotspotMap() {
         {/* Lasso result — optimal event location */}
         {lassoCircle && (
           <div className="lasso-callout">
-            <div className="callout-title">📍 Optimal Event Location — {lassoCircle.radiusKm.toFixed(1)}km radius</div>
+            <div className="callout-title">📍 Optimal Event Location by Distance — {lassoCircle.radiusKm.toFixed(1)}km radius</div>
             {lassoCircle.centroid ? (
               <>
                 <div className="callout-meta">
@@ -968,6 +1065,9 @@ export default function HCPHotspotMap() {
                 </div>
                 <div className="callout-coords">
                   {lassoCircle.centroid.lat.toFixed(3)}°N, {Math.abs(lassoCircle.centroid.lng).toFixed(3)}°W
+                </div>
+                <div className="callout-disclaimer">
+                  This is the geographical center of distance between Tier 1 targets. A better venue may be available based on accessibility, venues, and local factors.
                 </div>
               </>
             ) : (
@@ -996,19 +1096,41 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
-        {/* Tier 1 explainer */}
-        <div className="tier1-explainer">
-          <div className="tier1-explainer-star">★</div>
-          <div>
-            <div className="tier1-explainer-title">Tier 1 Targets</div>
-            <div className="tier1-explainer-text">
-              High-value prescribers with significant claims volume who are not yet engaged by competitors — the highest-priority opportunities for outreach and event planning.
+        {/* Tier explainers */}
+        <div className="tier-explainer-stack">
+          <div className="tier1-explainer">
+            <div className="tier1-explainer-star">★</div>
+            <div>
+              <div className="tier1-explainer-title">Tier 1 Targets</div>
+              <div className="tier1-explainer-text">
+                High-value prescribers with significant claims volume who are not yet engaged by competitors — the highest-priority opportunities for outreach and event planning.
+              </div>
             </div>
           </div>
+          <div className="tier1-explainer tier2-explainer">
+            <div className="tier1-explainer-star" style={{ color: "#C0C0C0", filter: "drop-shadow(0 0 4px rgba(192,192,192,0.5))" }}>★</div>
+            <div>
+              <div className="tier1-explainer-title" style={{ color: "#C0C0C0" }}>Tier 2</div>
+              <div className="tier1-explainer-text">
+                Lower-volume prescribers not currently engaged by competitors. Secondary priority — consider for broader outreach campaigns or as supporting targets near Tier 1 clusters.
+              </div>
+            </div>
+          </div>
+          {showHeatmap && (
+            <div className="tier1-explainer heatmap-explainer">
+              <div className="tier1-explainer-star" style={{ color: "#ff9100", filter: "drop-shadow(0 0 4px rgba(255,145,0,0.5))" }}>◉</div>
+              <div>
+                <div className="tier1-explainer-title" style={{ color: "#ff9100" }}>Density Heatmap</div>
+                <div className="tier1-explainer-text">
+                  Highlighted areas show where Tier 1 targets outnumber competitor-engaged markets — regions with the highest concentration of untapped opportunity.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="map-hint">
-          Scroll to zoom · Drag to pan · Hover for detail · ★ = Tier 1 · ■ = Engaged
+          Scroll to zoom · Drag to pan · Hover for detail · ★ Gold = Tier 1 · ★ Silver = Tier 2 · ■ = Engaged
         </div>
       </div>
     </>
