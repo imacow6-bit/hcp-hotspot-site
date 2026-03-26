@@ -535,6 +535,60 @@ body {
   line-height: 1.45;
 }
 
+/* ===== Legend Square ===== */
+.legend-square {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ===== Draw Circle Button ===== */
+.draw-btn.active {
+  border-color: var(--cyan) !important;
+  color: var(--cyan) !important;
+  background: rgba(0, 229, 255, 0.15) !important;
+  box-shadow: 0 0 12px var(--cyan-glow), inset 0 0 10px rgba(0, 229, 255, 0.05) !important;
+}
+
+/* ===== Draw Mode Hint ===== */
+.draw-mode-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--cyan);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--cyan);
+  z-index: 200;
+  pointer-events: none;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ===== Lasso Callout ===== */
+.lasso-callout {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  padding: 12px 20px;
+  z-index: 100;
+  box-shadow: 0 0 20px var(--cyan-glow), 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 320px;
+}
+
+.lasso-callout .callout-title {
+  color: var(--cyan);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .topbar { padding: 10px 16px; }

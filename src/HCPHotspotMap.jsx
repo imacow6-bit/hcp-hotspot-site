@@ -176,6 +176,41 @@ function findClusters(points, epsKm = 30, minPts = 5) {
     .sort((a, b) => b.count - a.count);
 }
 
+// ── Generate a GeoJSON circle polygon ────────────────────────────────────────
+function makeGeoCircle(lngCenter, latCenter, radiusKm, points = 64) {
+  const coords = [];
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    const dLat = (radiusKm / 6371) * (180 / Math.PI);
+    const dLng = dLat / Math.cos((latCenter * Math.PI) / 180);
+    coords.push([
+      lngCenter + dLng * Math.cos(angle),
+      latCenter + dLat * Math.sin(angle),
+    ]);
+  }
+  return {
+    type: "FeatureCollection",
+    features: [{ type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} }],
+  };
+}
+
+// ── Blue square canvas image for competitor-engaged doctors ──────────────────
+function makeSquareImage(size = 24, fillColor = "#4FC3F7") {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const pad = 3;
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(pad, pad, size - pad * 2, size - pad * 2);
+  ctx.fill();
+  ctx.stroke();
+  return ctx.getImageData(0, 0, size, size);
+}
+
 // ── Gold star canvas image for Tier 1 targets ───────────────────────────────
 function makeStarImage(size = 32, fillColor = "#FFD700") {
   const canvas = document.createElement("canvas");
@@ -219,6 +254,9 @@ export default function HCPHotspotMap() {
   const [stats, setStats] = useState(null);
   const [viewportCentroid, setViewportCentroid] = useState(null);
   const [hotspots, setHotspots] = useState([]);
+  const [drawMode, setDrawMode] = useState(false);
+  const [lassoCircle, setLassoCircle] = useState(null); // { center, radiusKm, targets, centroid }
+  const lassoMarkerRef = useRef(null);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -343,39 +381,63 @@ export default function HCPHotspotMap() {
         data: { type: "FeatureCollection", features: [] },
       });
 
-      // Circle layer: loyalty signal + volume signal only
-      // White Space (tier1 + !competitor_engaged) is shown as gold stars instead
+      // ── Blue square layer: competitor-engaged / loyalty doctors ─────────────
+      map.current.addImage("engaged-square", makeSquareImage(24, "#4FC3F7"), { sdf: false });
+
       map.current.addLayer({
         id: "prescriber-dots",
-        type: "circle",
+        type: "symbol",
         source: "prescribers",
-        layout: { visibility: "visible" },
         minzoom: 6,
         filter: ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]],
-        paint: {
-          "circle-color": SIGNAL_COLOR_EXPR,
-          "circle-radius": [
+        layout: {
+          "icon-image": "engaged-square",
+          "icon-size": [
             "interpolate", ["linear"], ["zoom"],
-            6,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 0.5, 50000, 2],
-            8,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 1.5, 50000, 5],
-            10, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 3,   50000, 10],
-            14, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 5,   50000, 16],
+            6, 0.25,
+            9, 0.55,
+            12, 0.8,
+            14, 1.0,
           ],
-          "circle-opacity": [
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-opacity": [
             "interpolate", ["linear"], ["zoom"],
             6, 0.15,
             8, ["case", ["get", "competitor_engaged"], 0.7, 0.45],
           ],
-          "circle-stroke-width": [
-            "interpolate", ["linear"], ["zoom"],
-            6, 0, 9, 0.5,
-          ],
-          "circle-stroke-color": "rgba(255,255,255,0.1)",
         },
       });
 
-      // ── Gold star layer: Tier 1 White Space targets ───────────────────────
-      map.current.addImage("tier1-star", makeStarImage(22, "#FFD700"), { sdf: false });
+      // ── Gold star layer: Tier 1 targets ─────────────────────────────────────
+      map.current.addImage("tier1-star", makeStarImage(32, "#FFD700"), { sdf: false });
+
+      // ── Lasso circle source + layer ─────────────────────────────────────────
+      map.current.addSource("lasso-circle", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.current.addLayer({
+        id: "lasso-circle-fill",
+        type: "fill",
+        source: "lasso-circle",
+        paint: {
+          "fill-color": "rgba(255, 215, 0, 0.08)",
+        },
+      });
+      map.current.addLayer({
+        id: "lasso-circle-line",
+        type: "line",
+        source: "lasso-circle",
+        paint: {
+          "line-color": "#FFD700",
+          "line-width": 2,
+          "line-dasharray": [4, 3],
+          "line-opacity": 0.7,
+        },
+      });
 
       map.current.addLayer({
         id: "tier1-stars",
@@ -464,6 +526,35 @@ export default function HCPHotspotMap() {
       setHoveredPrescriber(null);
     });
 
+    // ── Draw-circle lasso interaction ──────────────────────────────────────
+    let drawStart = null;
+    map.current.on("mousedown", (e) => {
+      if (!map.current.__drawMode) return;
+      e.preventDefault();
+      drawStart = e.lngLat;
+      map.current.dragPan.disable();
+    });
+    map.current.on("mousemove", (e) => {
+      if (!drawStart || !map.current.__drawMode) return;
+      const rKm = haversineKm(drawStart.lat, drawStart.lng, e.lngLat.lat, e.lngLat.lng);
+      const poly = makeGeoCircle(drawStart.lng, drawStart.lat, rKm);
+      map.current.getSource("lasso-circle")?.setData(poly);
+    });
+    map.current.on("mouseup", (e) => {
+      if (!drawStart || !map.current.__drawMode) return;
+      const center = drawStart;
+      drawStart = null;
+      map.current.dragPan.enable();
+      const rKm = haversineKm(center.lat, center.lng, e.lngLat.lat, e.lngLat.lng);
+      if (rKm < 1) return; // too small
+      const poly = makeGeoCircle(center.lng, center.lat, rKm);
+      map.current.getSource("lasso-circle")?.setData(poly);
+      // Dispatch custom event with circle info
+      window.dispatchEvent(new CustomEvent("lasso-complete", {
+        detail: { center, radiusKm: rKm },
+      }));
+    });
+
     return () => {
       map.current?.remove();
       map.current = null;
@@ -508,6 +599,68 @@ export default function HCPHotspotMap() {
   useEffect(() => {
     updateViewportAnalysis();
   }, [updateViewportAnalysis]);
+
+  // ── Sync drawMode to map instance ──────────────────────────────────────────
+  useEffect(() => {
+    if (map.current) {
+      map.current.__drawMode = drawMode;
+      map.current.getCanvas().style.cursor = drawMode ? "crosshair" : "";
+    }
+  }, [drawMode]);
+
+  // ── Lasso complete handler ────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      const { center, radiusKm } = e.detail;
+      if (!prescriberData) return;
+      const targets = prescriberData.filter(
+        (p) =>
+          p.lat != null &&
+          p.lng != null &&
+          p.tier === 1 &&
+          !p.competitor_engaged &&
+          !isInWater(p.lat, p.lng) &&
+          haversineKm(center.lat, center.lng, p.lat, p.lng) <= radiusKm &&
+          (activeSpecialty === "All Specialties" || p.specialty === activeSpecialty)
+      );
+      if (targets.length === 0) {
+        setLassoCircle({ center, radiusKm, targets: 0, centroid: null });
+      } else {
+        let wLat = 0, wLng = 0, totalW = 0;
+        for (const p of targets) {
+          const w = p.tot_clms || 1;
+          wLat += p.lat * w;
+          wLng += p.lng * w;
+          totalW += w;
+        }
+        setLassoCircle({
+          center,
+          radiusKm,
+          targets: targets.length,
+          totalClaims: targets.reduce((s, p) => s + (p.tot_clms || 0), 0),
+          centroid: { lat: wLat / totalW, lng: wLng / totalW },
+        });
+      }
+      setDrawMode(false);
+    };
+    window.addEventListener("lasso-complete", handler);
+    return () => window.removeEventListener("lasso-complete", handler);
+  }, [prescriberData, activeSpecialty]);
+
+  // ── Lasso centroid marker ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (lassoMarkerRef.current) {
+      lassoMarkerRef.current.remove();
+      lassoMarkerRef.current = null;
+    }
+    if (!map.current || !mapLoaded || !lassoCircle?.centroid) return;
+    const el = document.createElement("div");
+    el.className = "event-location-marker";
+    el.textContent = "📍";
+    lassoMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([lassoCircle.centroid.lng, lassoCircle.centroid.lat])
+      .addTo(map.current);
+  }, [lassoCircle, mapLoaded]);
 
   // ── Specialty + Tier 1 combined filter ──────────────────────────────────────
   useEffect(() => {
@@ -605,8 +758,8 @@ export default function HCPHotspotMap() {
 
   // Signal label/color helpers
   const getSignalLabel = (p) => {
-    if (p.tier === 1 && !p.competitor_engaged) return "White Space";
-    if (p.competitor_engaged) return "Loyalty Signal";
+    if (p.tier === 1 && !p.competitor_engaged) return "Tier 1 Target";
+    if (p.competitor_engaged) return "Competitor Engaged";
     return "Volume Signal";
   };
 
@@ -624,7 +777,7 @@ export default function HCPHotspotMap() {
           <h1>HCP Clinical Hotspot Map</h1>
           <div className="topbar-subtitle">
             {stats
-              ? `${stats.total.toLocaleString()} scored prescribers · ${stats.ws.toLocaleString()} White Space targets · ${stats.ce.toLocaleString()} competitor-engaged`
+              ? `${stats.total.toLocaleString()} scored prescribers · ${stats.ws.toLocaleString()} Tier 1 targets · ${stats.ce.toLocaleString()} competitor-engaged`
               : "Loading prescriber data..."}
           </div>
         </div>
@@ -660,6 +813,36 @@ export default function HCPHotspotMap() {
         >
           ★ Tier 1 Only
         </button>
+        <button
+          className={`filter-btn draw-btn ${drawMode ? "active" : ""}`}
+          onClick={() => {
+            if (drawMode) {
+              setDrawMode(false);
+            } else {
+              // Clear previous lasso
+              setLassoCircle(null);
+              if (map.current) {
+                map.current.getSource("lasso-circle")?.setData({ type: "FeatureCollection", features: [] });
+              }
+              setDrawMode(true);
+            }
+          }}
+        >
+          ◎ Draw Circle
+        </button>
+        {lassoCircle && (
+          <button
+            className="filter-btn"
+            onClick={() => {
+              setLassoCircle(null);
+              if (map.current) {
+                map.current.getSource("lasso-circle")?.setData({ type: "FeatureCollection", features: [] });
+              }
+            }}
+          >
+            ✕ Clear Circle
+          </button>
+        )}
       </div>
 
       {/* Legend */}
@@ -677,11 +860,11 @@ export default function HCPHotspotMap() {
             &nbsp;Tier 1 Target
           </span>
           <span className="legend-item">
-            <span className="legend-dot" style={{ background: SIGNAL_COLORS.loyalty }} />
-            Loyalty
+            <span className="legend-square" style={{ background: SIGNAL_COLORS.loyalty }} />
+            Competitor Engaged
           </span>
           <span className="legend-item">
-            <span className="legend-dot" style={{ background: SIGNAL_COLORS.volume }} />
+            <span className="legend-square" style={{ background: SIGNAL_COLORS.volume }} />
             Volume
           </span>
         </div>
@@ -725,7 +908,7 @@ export default function HCPHotspotMap() {
               className="tooltip-signal-badge"
               style={{ color: getSignalColor(hoveredPrescriber) }}
             >
-              {hoveredPrescriber.tier === 1 && !hoveredPrescriber.competitor_engaged ? "★" : "●"}{" "}
+              {hoveredPrescriber.tier === 1 && !hoveredPrescriber.competitor_engaged ? "★" : "■"}{" "}
               {getSignalLabel(hoveredPrescriber)}
             </div>
             <div className="tooltip-city">{hoveredPrescriber.name}</div>
@@ -763,6 +946,32 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
+        {/* Lasso circle result callout */}
+        {lassoCircle && (
+          <div className="lasso-callout">
+            <div className="callout-title">◎ Circle Selection — {lassoCircle.radiusKm.toFixed(1)}km radius</div>
+            {lassoCircle.centroid ? (
+              <>
+                <div className="callout-meta">
+                  {lassoCircle.targets} Tier 1 targets · {lassoCircle.totalClaims.toLocaleString()} claims
+                </div>
+                <div className="callout-coords">
+                  Optimal location: {lassoCircle.centroid.lat.toFixed(3)}°N, {Math.abs(lassoCircle.centroid.lng).toFixed(3)}°W
+                </div>
+              </>
+            ) : (
+              <div className="callout-meta">No Tier 1 targets in this area</div>
+            )}
+          </div>
+        )}
+
+        {/* Draw mode hint */}
+        {drawMode && (
+          <div className="draw-mode-hint">
+            Click and drag to draw a circle around targets
+          </div>
+        )}
+
         {/* Tier 1 explainer */}
         <div className="tier1-explainer">
           <div className="tier1-explainer-star">★</div>
@@ -775,7 +984,7 @@ export default function HCPHotspotMap() {
         </div>
 
         <div className="map-hint">
-          Scroll to zoom · Drag to pan · Hover for detail · ★ = Tier 1 Target
+          Scroll to zoom · Drag to pan · Hover for detail · ★ = Tier 1 · ■ = Engaged
         </div>
       </div>
     </>
