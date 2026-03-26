@@ -212,7 +212,7 @@ function makeSquareImage(size = 24, fillColor = "#4FC3F7") {
 }
 
 // ── Gold star canvas image for Tier 1 targets ───────────────────────────────
-function makeStarImage(size = 32, fillColor = "#FFD700") {
+function makeStarImage(size = 22, fillColor = "#FFD700") {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -254,7 +254,8 @@ export default function HCPHotspotMap() {
   const [viewportCentroid, setViewportCentroid] = useState(null);
   const [hotspots, setHotspots] = useState([]);
   const [drawMode, setDrawMode] = useState(false);
-  const [lassoCircle, setLassoCircle] = useState(null); // { center, radiusKm, targets, centroid }
+  const [lassoCircle, setLassoCircle] = useState(null);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   const lassoMarkerRef = useRef(null);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
@@ -411,7 +412,7 @@ export default function HCPHotspotMap() {
       });
 
       // ── Gold star layer: Tier 1 targets ─────────────────────────────────────
-      map.current.addImage("tier1-star", makeStarImage(32, "#FFD700"), { sdf: false });
+      map.current.addImage("tier1-star", makeStarImage(22, "#FFD700"), { sdf: false });
 
       // ── Lasso circle source + layer ─────────────────────────────────────────
       map.current.addSource("lasso-circle", {
@@ -435,6 +436,55 @@ export default function HCPHotspotMap() {
           "line-width": 2,
           "line-dasharray": [4, 3],
           "line-opacity": 0.7,
+        },
+      });
+
+      // ── Tier 1 density heatmap source + layer ────────────────────────────
+      map.current.addSource("tier1-heatmap", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.current.addLayer({
+        id: "tier1-heat",
+        type: "heatmap",
+        source: "tier1-heatmap",
+        maxzoom: 14,
+        layout: { visibility: "none" },
+        paint: {
+          "heatmap-weight": [
+            "interpolate", ["linear"], ["get", "tot_clms"],
+            100, 0.3,
+            10000, 0.7,
+            50000, 1,
+          ],
+          "heatmap-intensity": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 0.6,
+            8, 1.2,
+            12, 2,
+          ],
+          "heatmap-radius": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 15,
+            8, 30,
+            12, 45,
+          ],
+          "heatmap-color": [
+            "interpolate", ["linear"], ["heatmap-density"],
+            0,   "rgba(0,0,0,0)",
+            0.15, "rgba(255,215,0,0.08)",
+            0.3, "rgba(255,200,0,0.2)",
+            0.5, "rgba(255,170,0,0.35)",
+            0.7, "rgba(255,140,0,0.5)",
+            0.9, "rgba(255,100,0,0.7)",
+            1,   "rgba(255,60,0,0.85)",
+          ],
+          "heatmap-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 0.8,
+            12, 0.6,
+            14, 0.3,
+          ],
         },
       });
 
@@ -585,7 +635,26 @@ export default function HCPHotspotMap() {
       type: "FeatureCollection",
       features,
     });
+
+    // Populate Tier 1 heatmap source
+    const tier1Features = features.filter(
+      (f) => f.properties.tier === 1 && !f.properties.competitor_engaged
+    );
+    map.current.getSource("tier1-heatmap")?.setData({
+      type: "FeatureCollection",
+      features: tier1Features,
+    });
   }, [mapLoaded, prescriberData]);
+
+  // ── Toggle heatmap visibility ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapLoaded || !map.current) return;
+    map.current.setLayoutProperty(
+      "tier1-heat",
+      "visibility",
+      showHeatmap ? "visible" : "none"
+    );
+  }, [showHeatmap, mapLoaded]);
 
   // ── Listen for map moveend to recompute viewport analysis ──────────────────
   useEffect(() => {
@@ -803,6 +872,12 @@ export default function HCPHotspotMap() {
         ))}
         <span className="filter-divider" />
         <button
+          className={`filter-btn heatmap-btn ${showHeatmap ? "active" : ""}`}
+          onClick={() => setShowHeatmap((v) => !v)}
+        >
+          ★ Density
+        </button>
+        <button
           className={`filter-btn draw-btn ${drawMode ? "active" : ""}`}
           onClick={() => {
             if (drawMode) {
@@ -851,10 +926,6 @@ export default function HCPHotspotMap() {
           <span className="legend-item">
             <span className="legend-square" style={{ background: SIGNAL_COLORS.loyalty }} />
             Competitor Engaged
-          </span>
-          <span className="legend-item">
-            <span className="legend-square" style={{ background: SIGNAL_COLORS.volume }} />
-            Volume
           </span>
         </div>
       )}

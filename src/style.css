@@ -493,6 +493,14 @@ body {
   font-style: italic;
 }
 
+/* ===== Heatmap Button ===== */
+.heatmap-btn.active {
+  border-color: #ff9100 !important;
+  color: #ff9100 !important;
+  background: rgba(255, 145, 0, 0.12) !important;
+  box-shadow: 0 0 12px rgba(255, 145, 0, 0.3), inset 0 0 10px rgba(255, 145, 0, 0.05) !important;
+}
+
 /* ===== Tier 1 Explainer ===== */
 .tier1-explainer {
   position: absolute;
