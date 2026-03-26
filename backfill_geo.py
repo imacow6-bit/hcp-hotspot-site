@@ -176,8 +176,8 @@ for p in prescribers:
 
         if coords:
             # Real city coordinates + small jitter for metro spread
-            jitter_lat = random.gauss(0, 0.012)  # ~0.8 mile std dev
-            jitter_lng = random.gauss(0, 0.015)
+            jitter_lat = random.gauss(0, 0.004)  # ~0.27 mile std dev — reduced to avoid water placement
+            jitter_lng = random.gauss(0, 0.005)
             p["lat"] = round(coords[0] + jitter_lat, 4)
             p["lng"] = round(coords[1] + jitter_lng, 4)
             p["city"] = city_raw.title()  # Save city name for future use

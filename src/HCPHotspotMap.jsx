@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -23,7 +23,7 @@ const SPECIALTY_COLORS = {
 
 // Three-signal color system
 const SIGNAL_COLORS = {
-  whitespace: "#FFD700",  // Gold — Tier 1, no competitor engagement
+  whitespace: "#FFD700",  // Gold — Tier 1, no competitor engagement (shown as stars)
   loyalty:    "#4FC3F7",  // Blue — competitor-engaged
   volume:     "#78909C",  // Slate — Tier 2, not engaged
 };
@@ -41,46 +41,88 @@ const DOMINANT_COLOR_EXPR = [
   "#00e5ff",
 ];
 
-// Signal color expression for prescriber dots
+// Signal color for circle layer (loyalty + volume only — White Space shown as stars)
 const SIGNAL_COLOR_EXPR = [
   "case",
-  // White Space: Tier 1 + not competitor-engaged
-  ["all",
-    ["==", ["get", "tier"], 1],
-    ["!", ["get", "competitor_engaged"]],
-  ],
-  SIGNAL_COLORS.whitespace,
-  // Loyalty Signal: competitor-engaged (any tier)
   ["get", "competitor_engaged"],
   SIGNAL_COLORS.loyalty,
-  // Volume Signal: everything else (Tier 2, not engaged)
   SIGNAL_COLORS.volume,
 ];
 
 // OpenFreeMap free vector tiles — no token required
 const TILE_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
-// No separate view modes — both layers shown simultaneously
+// ── Water exclusion: simplified Lake Michigan polygon ─────────────────────────
+const LAKE_MICHIGAN = [
+  [-87.9, 41.6], [-86.9, 41.6], [-86.6, 42.0], [-86.4, 42.8],
+  [-86.3, 43.5], [-86.4, 44.0], [-86.6, 44.8], [-87.4, 45.4],
+  [-87.8, 46.0], [-86.6, 46.1], [-85.3, 45.8], [-85.2, 45.2],
+  [-84.9, 44.8], [-85.1, 44.3], [-85.4, 44.0], [-85.8, 43.5],
+  [-86.0, 43.0], [-86.3, 42.4], [-87.2, 41.8], [-87.9, 41.6],
+];
+
+function pointInPolygon(lat, lng, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (((yi > lat) !== (yj > lat)) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+function isInWater(lat, lng) {
+  return pointInPolygon(lat, lng, LAKE_MICHIGAN);
+}
+
+// ── Gold star canvas image for Tier 1 White Space markers ────────────────────
+function makeStarImage(size = 22, fillColor = "#FFD700") {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const cx = size / 2, cy = size / 2;
+  const r1 = size / 2 - 1.5;
+  const r2 = size / 4.5;
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = "rgba(0,0,0,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a1 = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+    const a2 = a1 + (2 * Math.PI) / 10;
+    if (i === 0)
+      ctx.moveTo(cx + r1 * Math.cos(a1), cy + r1 * Math.sin(a1));
+    else
+      ctx.lineTo(cx + r1 * Math.cos(a1), cy + r1 * Math.sin(a1));
+    ctx.lineTo(cx + r2 * Math.cos(a2), cy + r2 * Math.sin(a2));
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  return ctx.getImageData(0, 0, size, size);
+}
 
 export default function HCPHotspotMap() {
   const mapContainer = useRef(null);
   const map = useRef(null);
-  const popup = useRef(null);
+  const eventMarkerRef = useRef(null);
 
   const [activeSpecialty, setActiveSpecialty] = useState("All Specialties");
+  const [showTier1Only, setShowTier1Only] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredZip, setHoveredZip] = useState(null);
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
   const [prescriberData, setPrescriberData] = useState(null);
   const [stats, setStats] = useState(null);
 
-  // ── Load prescriber data ────────────────────────────────────────────────────
+  // ── Load prescriber data ─────────────────────────────────────────────────────
   useEffect(() => {
     fetch("/prescriber_scores.json")
       .then((r) => r.json())
       .then((data) => {
         setPrescriberData(data);
-        // Compute stats
         const total = data.length;
         const t1 = data.filter((d) => d.tier === 1).length;
         const ws = data.filter((d) => d.tier === 1 && !d.competitor_engaged).length;
@@ -90,7 +132,30 @@ export default function HCPHotspotMap() {
       .catch(() => setPrescriberData([]));
   }, []);
 
-  // ── Initialize map ──────────────────────────────────────────────────────────
+  // ── Compute optimal event location (weighted centroid of Tier 1 White Space) ──
+  const eventLocation = useMemo(() => {
+    if (!prescriberData || !showTier1Only) return null;
+    const pts = prescriberData.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        p.tier === 1 &&
+        !p.competitor_engaged &&
+        !isInWater(p.lat, p.lng) &&
+        (activeSpecialty === "All Specialties" || p.specialty === activeSpecialty)
+    );
+    if (pts.length === 0) return null;
+    let wLat = 0, wLng = 0, totalW = 0;
+    for (const p of pts) {
+      const w = p.tot_clms || 1;
+      wLat += p.lat * w;
+      wLng += p.lng * w;
+      totalW += w;
+    }
+    return { lat: wLat / totalW, lng: wLng / totalW, count: pts.length };
+  }, [prescriberData, showTier1Only, activeSpecialty]);
+
+  // ── Initialize map ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (map.current) return;
 
@@ -148,19 +213,21 @@ export default function HCPHotspotMap() {
         },
       });
 
-      // ── Prescriber source + layer ─────────────────────────────────────────
+      // ── Prescriber source ─────────────────────────────────────────────────
       map.current.addSource("prescribers", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
 
+      // Circle layer: loyalty signal + volume signal only
+      // White Space (tier1 + !competitor_engaged) is shown as gold stars instead
       map.current.addLayer({
         id: "prescriber-dots",
         type: "circle",
         source: "prescribers",
         layout: { visibility: "visible" },
-        // Only show prescribers at zoom 6+ so density layer is readable at country view
         minzoom: 6,
+        filter: ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]],
         paint: {
           "circle-color": SIGNAL_COLOR_EXPR,
           "circle-radius": [
@@ -173,40 +240,42 @@ export default function HCPHotspotMap() {
           "circle-opacity": [
             "interpolate", ["linear"], ["zoom"],
             6, 0.15,
-            8, ["case",
-              // White space gets full opacity
-              ["all",
-                ["==", ["get", "tier"], 1],
-                ["!", ["get", "competitor_engaged"]],
-              ],
-              0.92,
-              // Loyalty signal
-              ["get", "competitor_engaged"],
-              0.7,
-              // Volume signal (background)
-              0.45,
-            ],
+            8, ["case", ["get", "competitor_engaged"], 0.7, 0.45],
           ],
           "circle-stroke-width": [
             "interpolate", ["linear"], ["zoom"],
-            6, 0,
-            9, ["case",
-              ["all",
-                ["==", ["get", "tier"], 1],
-                ["!", ["get", "competitor_engaged"]],
-              ],
-              1.5,
-              0.5,
-            ],
+            6, 0, 9, 0.5,
           ],
-          "circle-stroke-color": [
-            "case",
-            ["all",
-              ["==", ["get", "tier"], 1],
-              ["!", ["get", "competitor_engaged"]],
-            ],
-            "rgba(255, 215, 0, 0.5)",
-            "rgba(255, 255, 255, 0.1)",
+          "circle-stroke-color": "rgba(255,255,255,0.1)",
+        },
+      });
+
+      // ── Gold star layer: Tier 1 White Space targets ───────────────────────
+      map.current.addImage("tier1-star", makeStarImage(22, "#FFD700"), { sdf: false });
+
+      map.current.addLayer({
+        id: "tier1-stars",
+        type: "symbol",
+        source: "prescribers",
+        minzoom: 6,
+        filter: ["all", ["==", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]],
+        layout: {
+          "icon-image": "tier1-star",
+          "icon-size": [
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.35,
+            9, 0.65,
+            12, 0.95,
+            14, 1.2,
+          ],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.15,
+            8, 0.9,
           ],
         },
       });
@@ -214,8 +283,7 @@ export default function HCPHotspotMap() {
       setMapLoaded(true);
     });
 
-    // ── Hover interactions ─────────────────────────────────────────────────────
-    // ZIP density hover
+    // ── Hover: ZIP density ──────────────────────────────────────────────────
     map.current.on("mousemove", "hcp-dots", (e) => {
       map.current.getCanvas().style.cursor = "pointer";
       const f = e.features[0];
@@ -230,7 +298,7 @@ export default function HCPHotspotMap() {
       setHoveredZip(null);
     });
 
-    // Prescriber hover
+    // ── Hover: prescriber circles (loyalty + volume) ────────────────────────
     map.current.on("mousemove", "prescriber-dots", (e) => {
       map.current.getCanvas().style.cursor = "pointer";
       const f = e.features[0];
@@ -248,18 +316,36 @@ export default function HCPHotspotMap() {
       setHoveredPrescriber(null);
     });
 
+    // ── Hover: Tier 1 stars (White Space) ──────────────────────────────────
+    map.current.on("mousemove", "tier1-stars", (e) => {
+      map.current.getCanvas().style.cursor = "pointer";
+      const f = e.features[0];
+      if (!f) return;
+      const p = f.properties;
+      setHoveredPrescriber({
+        ...p,
+        companies: p.companies ? JSON.parse(p.companies) : [],
+        lngLat: e.lngLat,
+      });
+    });
+
+    map.current.on("mouseleave", "tier1-stars", () => {
+      map.current.getCanvas().style.cursor = "";
+      setHoveredPrescriber(null);
+    });
+
     return () => {
       map.current?.remove();
       map.current = null;
     };
   }, []);
 
-  // ── Load prescriber GeoJSON when data is ready ──────────────────────────────
+  // ── Load prescriber GeoJSON (filter water points) ───────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current || !prescriberData) return;
 
     const features = prescriberData
-      .filter((p) => p.lat != null && p.lng != null)
+      .filter((p) => p.lat != null && p.lng != null && !isInWater(p.lat, p.lng))
       .map((p) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [p.lng, p.lat] },
@@ -281,11 +367,28 @@ export default function HCPHotspotMap() {
     });
   }, [mapLoaded, prescriberData]);
 
-  // ── Specialty filter ───────────────────────────────────────────────────────
+  // ── Specialty + Tier 1 combined filter ──────────────────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
 
-    // Density mode filtering
+    // Layer base filters
+    const wsBase = ["all", ["==", ["get", "tier"], 1], ["!", ["get", "competitor_engaged"]]];
+    const circleBase = ["any", ["get", "competitor_engaged"], ["!=", ["get", "tier"], 1]];
+    // When Tier 1 Only: circles show only tier-1 loyalty (competitor_engaged tier-1)
+    const circleWhenTier1 = ["all", ["get", "competitor_engaged"], ["==", ["get", "tier"], 1]];
+
+    const circleFilter = showTier1Only ? circleWhenTier1 : circleBase;
+
+    if (activeSpecialty === "All Specialties") {
+      map.current.setFilter("prescriber-dots", circleFilter);
+      map.current.setFilter("tier1-stars", wsBase);
+    } else {
+      const specExpr = ["==", ["get", "specialty"], activeSpecialty];
+      map.current.setFilter("prescriber-dots", ["all", circleFilter, specExpr]);
+      map.current.setFilter("tier1-stars", ["all", wsBase, specExpr]);
+    }
+
+    // ── ZIP density paint ───────────────────────────────────────────────────
     if (activeSpecialty === "All Specialties") {
       map.current.setPaintProperty("hcp-dots", "circle-color", DOMINANT_COLOR_EXPR);
       map.current.setPaintProperty("hcp-dots", "circle-radius", [
@@ -295,8 +398,6 @@ export default function HCPHotspotMap() {
         14, ["interpolate", ["linear"], ["get", "total"], 0, 6, 50, 20],
       ]);
       map.current.setPaintProperty("hcp-dots", "circle-opacity", 0.82);
-      // Prescriber mode: show all
-      map.current.setFilter("prescriber-dots", null);
     } else {
       const color = SPECIALTY_COLORS[activeSpecialty];
       map.current.setPaintProperty("hcp-dots", "circle-color", color);
@@ -311,14 +412,29 @@ export default function HCPHotspotMap() {
         [">", ["get", activeSpecialty], 0], 0.85,
         0.08,
       ]);
-      // Prescriber mode: filter to selected specialty
-      map.current.setFilter("prescriber-dots", [
-        "==", ["get", "specialty"], activeSpecialty,
-      ]);
     }
-  }, [activeSpecialty, mapLoaded]);
+  }, [activeSpecialty, showTier1Only, mapLoaded]);
 
-  // Signal label helper
+  // ── Event location marker ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    if (eventMarkerRef.current) {
+      eventMarkerRef.current.remove();
+      eventMarkerRef.current = null;
+    }
+    if (!eventLocation) return;
+
+    const el = document.createElement("div");
+    el.className = "event-location-marker";
+    el.textContent = "📍";
+
+    eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([eventLocation.lng, eventLocation.lat])
+      .addTo(map.current);
+  }, [eventLocation, mapLoaded]);
+
+  // Signal label/color helpers
   const getSignalLabel = (p) => {
     if (p.tier === 1 && !p.competitor_engaged) return "White Space";
     if (p.competitor_engaged) return "Loyalty Signal";
@@ -343,7 +459,6 @@ export default function HCPHotspotMap() {
               : "Loading prescriber data..."}
           </div>
         </div>
-
       </div>
 
       {/* Filter Bar */}
@@ -369,9 +484,16 @@ export default function HCPHotspotMap() {
             {s}
           </button>
         ))}
+        <span className="filter-divider" />
+        <button
+          className={`filter-btn tier1-btn ${showTier1Only ? "active" : ""}`}
+          onClick={() => setShowTier1Only((v) => !v)}
+        >
+          ★ Tier 1 Only
+        </button>
       </div>
 
-      {/* Legend — specialty colors + signal colors */}
+      {/* Legend */}
       {activeSpecialty === "All Specialties" && (
         <div className="specialty-legend">
           {Object.entries(SPECIALTY_COLORS).map(([spec, color]) => (
@@ -382,8 +504,8 @@ export default function HCPHotspotMap() {
           ))}
           <span className="legend-separator" />
           <span className="legend-item">
-            <span className="legend-dot legend-dot-glow" style={{ background: SIGNAL_COLORS.whitespace }} />
-            White Space
+            <span style={{ color: SIGNAL_COLORS.whitespace, fontSize: "13px", lineHeight: 1 }}>★</span>
+            &nbsp;White Space
           </span>
           <span className="legend-item">
             <span className="legend-dot" style={{ background: SIGNAL_COLORS.loyalty }} />
@@ -430,8 +552,12 @@ export default function HCPHotspotMap() {
         {/* Prescriber Tooltip */}
         {hoveredPrescriber && (
           <div className="zip-tooltip prescriber-tooltip">
-            <div className="tooltip-signal-badge" style={{ color: getSignalColor(hoveredPrescriber) }}>
-              ● {getSignalLabel(hoveredPrescriber)}
+            <div
+              className="tooltip-signal-badge"
+              style={{ color: getSignalColor(hoveredPrescriber) }}
+            >
+              {hoveredPrescriber.tier === 1 && !hoveredPrescriber.competitor_engaged ? "★" : "●"}{" "}
+              {getSignalLabel(hoveredPrescriber)}
             </div>
             <div className="tooltip-city">{hoveredPrescriber.name}</div>
             <div className="tooltip-meta">
@@ -453,8 +579,22 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
+        {/* Optimal Event Location callout */}
+        {eventLocation && (
+          <div className="event-location-callout">
+            <div className="callout-title">📍 Optimal Event Location</div>
+            <div className="callout-meta">
+              {eventLocation.count.toLocaleString()} Tier 1 White Space targets
+              {activeSpecialty !== "All Specialties" ? ` · ${activeSpecialty}` : ""}
+            </div>
+            <div className="callout-coords">
+              {eventLocation.lat.toFixed(3)}°N, {Math.abs(eventLocation.lng).toFixed(3)}°W
+            </div>
+          </div>
+        )}
+
         <div className="map-hint">
-          Scroll to zoom · Drag to pan · Hover for detail · Gold = White Space target
+          Scroll to zoom · Drag to pan · Hover for detail · ★ = White Space target
         </div>
       </div>
     </>
