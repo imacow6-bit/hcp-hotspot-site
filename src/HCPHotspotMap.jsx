@@ -287,6 +287,7 @@ export default function HCPHotspotMap() {
   const [drawMode, setDrawMode] = useState(false);
   const [lassoCircle, setLassoCircle] = useState(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(4);
   const lassoMarkerRef = useRef(null);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
@@ -430,7 +431,7 @@ export default function HCPHotspotMap() {
       });
 
       // ── Silver star layer: Tier 2 (non-engaged, non-tier-1) ────────────────
-      map.current.addImage("tier2-star", makeStarImage(22, "#C0C0C0"), { sdf: false });
+      map.current.addImage("tier2-star", makeStarImage(22, "#D8D8D8"), { sdf: false });
 
       map.current.addLayer({
         id: "tier2-stars",
@@ -442,10 +443,10 @@ export default function HCPHotspotMap() {
           "icon-image": "tier2-star",
           "icon-size": [
             "interpolate", ["linear"], ["zoom"],
-            6, 0.3,
-            9, 0.6,
-            12, 0.85,
-            14, 1.1,
+            6, 0.45,
+            9, 0.85,
+            12, 1.15,
+            14, 1.5,
           ],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -454,7 +455,7 @@ export default function HCPHotspotMap() {
           "icon-opacity": [
             "interpolate", ["linear"], ["zoom"],
             6, 0.1,
-            8, 0.5,
+            8, 0.55,
           ],
         },
       });
@@ -569,11 +570,31 @@ export default function HCPHotspotMap() {
       setMapLoaded(true);
     });
 
+    // ── Track zoom level for onboarding overlay ────────────────────────────
+    map.current.on("zoom", () => {
+      const z = map.current.getZoom();
+      window.dispatchEvent(new CustomEvent("map-zoom", { detail: z }));
+    });
+
     // ── Recompute centroid + hotspots on pan/zoom ───────────────────────────
     map.current.on("moveend", () => {
-      // Trigger re-analysis — the updateViewportAnalysis callback handles it
       window.dispatchEvent(new CustomEvent("map-moveend"));
     });
+
+    // ── Star pulse animation ────────────────────────────────────────────────
+    let pulsePhase = 0;
+    const pulseInterval = setInterval(() => {
+      if (!map.current) return;
+      pulsePhase = (pulsePhase + 1) % 60;
+      const t = Math.sin((pulsePhase / 60) * Math.PI * 2) * 0.5 + 0.5; // 0..1
+      const zoom = map.current.getZoom();
+      const baseOpacity = zoom < 8 ? 0.15 + (zoom - 6) * 0.375 : 0.9;
+      const pulse = baseOpacity * (0.7 + 0.3 * t);
+      try {
+        map.current.setPaintProperty("tier1-stars", "icon-opacity", pulse);
+        map.current.setPaintProperty("tier2-stars", "icon-opacity", pulse * 0.6);
+      } catch (_) {}
+    }, 50);
 
     // ── Hover: ZIP density ──────────────────────────────────────────────────
     map.current.on("mousemove", "hcp-dots", (e) => {
@@ -674,9 +695,17 @@ export default function HCPHotspotMap() {
     });
 
     return () => {
+      clearInterval(pulseInterval);
       map.current?.remove();
       map.current = null;
     };
+  }, []);
+
+  // ── Track zoom level for onboarding ────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => setZoomLevel(e.detail);
+    window.addEventListener("map-zoom", handler);
+    return () => window.removeEventListener("map-zoom", handler);
   }, []);
 
   // ── Load prescriber GeoJSON (filter water points) ───────────────────────────
@@ -889,7 +918,7 @@ export default function HCPHotspotMap() {
   const getSignalColor = (p) => {
     if (p.tier === 1 && !p.competitor_engaged) return SIGNAL_COLORS.whitespace;
     if (p.competitor_engaged) return SIGNAL_COLORS.loyalty;
-    return "#C0C0C0";
+    return "#D8D8D8";
   };
 
   return (
@@ -983,7 +1012,7 @@ export default function HCPHotspotMap() {
             &nbsp;Tier 1 Target
           </span>
           <span className="legend-item">
-            <span style={{ color: "#C0C0C0", fontSize: "14px", lineHeight: 1 }}>★</span>
+            <span style={{ color: "#D8D8D8", fontSize: "14px", lineHeight: 1 }}>★</span>
             &nbsp;Tier 2
           </span>
           <span className="legend-item">
@@ -996,6 +1025,35 @@ export default function HCPHotspotMap() {
       {/* Map */}
       <div className="map-wrapper">
         <div ref={mapContainer} className="maplibre-container" />
+
+        {/* Onboarding overlay — fades out as user zooms in */}
+        {zoomLevel < 7 && (
+          <div
+            className="onboarding-overlay"
+            style={{ opacity: Math.max(0, 1 - (zoomLevel - 4) / 3) }}
+          >
+            {zoomLevel < 5.5 ? (
+              <>
+                <div className="onboarding-big">Scroll to Zoom In</div>
+                <div className="onboarding-sub">Explore prescriber data across the United States</div>
+              </>
+            ) : (
+              <>
+                <div className="onboarding-big">Keep Zooming</div>
+                <div className="onboarding-sub">Get to a state or metro level to see individual prescribers</div>
+              </>
+            )}
+            <div className="onboarding-arrow">↓</div>
+          </div>
+        )}
+        {zoomLevel >= 7 && zoomLevel < 9 && (
+          <div
+            className="onboarding-hint"
+            style={{ opacity: Math.max(0, 1 - (zoomLevel - 7) / 2) }}
+          >
+            ★ Stars and ■ squares are now visible — hover over them for prescriber details
+          </div>
+        )}
 
         {/* ZIP Tooltip */}
         {hoveredZip && !hoveredPrescriber && (
@@ -1108,9 +1166,9 @@ export default function HCPHotspotMap() {
             </div>
           </div>
           <div className="tier1-explainer tier2-explainer">
-            <div className="tier1-explainer-star" style={{ color: "#C0C0C0", filter: "drop-shadow(0 0 4px rgba(192,192,192,0.5))" }}>★</div>
+            <div className="tier1-explainer-star" style={{ color: "#D8D8D8", filter: "drop-shadow(0 0 4px rgba(192,192,192,0.5))" }}>★</div>
             <div>
-              <div className="tier1-explainer-title" style={{ color: "#C0C0C0" }}>Tier 2</div>
+              <div className="tier1-explainer-title" style={{ color: "#D8D8D8" }}>Tier 2</div>
               <div className="tier1-explainer-text">
                 Lower-volume prescribers not currently engaged by competitors. Secondary priority — consider for broader outreach campaigns or as supporting targets near Tier 1 clusters.
               </div>
