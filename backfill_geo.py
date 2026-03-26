@@ -1,8 +1,9 @@
 """
 Backfill prescriber_scores.json with city-level coordinates.
-Reads NPI -> city from Part D, then geocodes using uscities.csv (real coordinates).
+Reads NPI -> city from Part D and places prescribers using
+deterministic state-aware ZIP anchors.
 """
-import json, csv, zipfile, random, os
+import json, csv, zipfile, random, os, hashlib
 from collections import defaultdict
 
 random.seed(42)
@@ -78,18 +79,58 @@ print("\n[3/4] Building state centroids (fallback only)...")
 with open("src/zip_level_data.json") as f:
     zip_data = json.load(f)
 
-state_center = defaultdict(lambda: {"lat_sum": 0, "lng_sum": 0, "count": 0})
+# Build state bounding boxes + sorted ZIP anchors per state
+state_bounds = defaultdict(lambda: {
+    "min_lat": 90, "max_lat": -90,
+    "min_lng": 180, "max_lng": -180,
+    "count": 0
+})
+state_zip_anchors = defaultdict(list)
+
 for z in zip_data:
-    s = state_center[z["state"]]
-    s["lat_sum"] += z["lat"]
-    s["lng_sum"] += z["lng"]
+    s = state_bounds[z["state"]]
+    s["min_lat"] = min(s["min_lat"], z["lat"])
+    s["max_lat"] = max(s["max_lat"], z["lat"])
+    s["min_lng"] = min(s["min_lng"], z["lng"])
+    s["max_lng"] = max(s["max_lng"], z["lng"])
     s["count"] += 1
+    docs_total = sum(z.get("docs", {}).values())
+    state_zip_anchors[z["state"]].append({
+        "lat": z["lat"],
+        "lng": z["lng"],
+        "weight": docs_total if docs_total > 0 else 1,
+    })
 
-state_centroids = {}
-for st, s in state_center.items():
-    state_centroids[st] = (s["lat_sum"] / s["count"], s["lng_sum"] / s["count"])
+for state in state_zip_anchors:
+    anchors = sorted(state_zip_anchors[state], key=lambda x: x["weight"], reverse=True)
+    state_zip_anchors[state] = anchors[:250]
 
-print(f"  Built centroids for {len(state_centroids)} states")
+print(f"  Built ZIP anchors for {len(state_zip_anchors)} states")
+
+def stable_int(value, bits=64):
+    """Stable hash helper (independent of PYTHONHASHSEED)."""
+    digest = hashlib.blake2b(value.encode("utf-8"), digest_size=16).digest()
+    return int.from_bytes(digest, "big") & ((1 << bits) - 1)
+
+def city_to_coords(city, state):
+    """Deterministically map a city to a weighted ZIP anchor within its state."""
+    bounds = state_bounds.get(state)
+    anchors = state_zip_anchors.get(state)
+    if not bounds or not anchors:
+        return None
+
+    key = f"{city}|{state}"
+    h1 = stable_int(f"{key}|anchor")
+    h2 = stable_int(f"{key}|jitter")
+
+    anchor = anchors[h1 % len(anchors)]
+
+    lat_range = max(bounds["max_lat"] - bounds["min_lat"], 1.0)
+    lng_range = max(bounds["max_lng"] - bounds["min_lng"], 1.0)
+    lat_jitter = (((h2 & 0xFFFF) / 0xFFFF) - 0.5) * (0.06 * lat_range)
+    lng_jitter = ((((h2 >> 16) & 0xFFFF) / 0xFFFF) - 0.5) * (0.06 * lng_range)
+
+    return (anchor["lat"] + lat_jitter, anchor["lng"] + lng_jitter)
 
 # ─── Step 4: Patch prescriber_scores.json ─────────────────────────────────────
 print("\n[4/4] Patching prescriber_scores.json with real coordinates...")
@@ -146,12 +187,12 @@ for p in prescribers:
                 normalized_match += 1
             continue
 
-    # Last-resort fallback: state centroid with wider jitter
+    # Last-resort fallback: deterministic ZIP anchor for the state
     state = p.get("state", "")
-    centroid = state_centroids.get(state)
-    if centroid:
-        p["lat"] = round(centroid[0] + random.gauss(0, 0.15), 4)
-        p["lng"] = round(centroid[1] + random.gauss(0, 0.18), 4)
+    coords = city_to_coords("UNKNOWN", state)
+    if coords:
+        p["lat"] = round(coords[0], 4)
+        p["lng"] = round(coords[1], 4)
         state_fallback += 1
     else:
         dropped += 1
