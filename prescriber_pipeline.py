@@ -14,17 +14,16 @@ Outputs: public/prescriber_scores.json
 DATA SOURCES — download before running
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. Medicare Part D Prescribers — by Provider and Drug (2022)
+1. Medicare Part D Prescribers — by Provider and Drug (2023)
    URL: https://data.cms.gov/provider-summary-by-type-of-service/
         medicare-part-d-prescribers/medicare-part-d-prescribers-by-provider-and-drug
-   Click "Download" → CSV. File is ~2-4 GB. Rename to partd_by_drug.csv.zip.
-   Why this file (not "by Provider"): it has Prscrbr_Zip5 for lat/lng join.
+   Click "Download" → CSV (downloads as a .zip). Rename to partd_by_drug.zip.
+   Drop the zip as-is — no need to extract.
 
-2. Open Payments — General Payments (most recent year)
-   URL: https://openpaymentsdata.cms.gov/datasets/general-payment-data-with-
-        deleted-records-publication-year-2023-data-from-the-open-payments-program
-   Click "Export" → CSV. File is ~2-5 GB. Rename to open_payments.csv.zip.
-   We only read 3 columns so memory is manageable despite the file size.
+2. Open Payments — General Payments (2023)
+   URL: https://openpaymentsdata.cms.gov/dataset/fb3a65aa-c901-4a38-a813-b04b00dfa2a9
+   Click "Export" → CSV (downloads as a .zip). Rename to open_payments.zip.
+   Drop the zip as-is — no need to extract.
 
 3. ZIP centroids — auto-loaded from src/zip_level_data.json (already present).
 
@@ -38,15 +37,17 @@ Usage:
 import os
 import json
 import math
+import zipfile
 import pandas as pd
 from collections import defaultdict
 
 # ─────────────────────────────────────────────────────────
-# CONFIG — update paths if files are elsewhere
+# CONFIG — accepts .zip OR .csv for both data files
+# Drop the zip straight from CMS into the project root.
 # ─────────────────────────────────────────────────────────
 
-PART_D_PATH       = "partd_by_drug.csv.zip"
-OPEN_PAYMENTS_PATH = "open_payments.csv.zip"
+PART_D_PATH        = "partd_by_drug.zip"       # or .csv if already extracted
+OPEN_PAYMENTS_PATH = "open_payments.zip"        # or .csv if already extracted
 ZIP_DATA_PATH     = "src/zip_level_data.json"
 OUTPUT_PATH       = "public/prescriber_scores.json"
 
@@ -58,6 +59,44 @@ CHUNK_SIZE = 100_000
 # Bottom 25% omitted from output (too low volume)
 TIER1_PERCENTILE = 0.75   # top 25%  → Tier 1
 TIER2_PERCENTILE = 0.25   # top 75%  → Tier 2  (Tier 2 = between these two)
+
+# ─────────────────────────────────────────────────────────
+# ZIP-AWARE FILE OPENER
+# ─────────────────────────────────────────────────────────
+
+def open_csv(path, usecols, dtype, chunksize):
+    """
+    Open a CSV for chunked pandas reading whether it's a .zip or .csv.
+    For .zip files: auto-detects the right CSV inside by picking the
+    largest file (which is always the main data file for CMS zips).
+    No extraction needed — streams directly from the compressed zip.
+    """
+    if path.endswith(".zip"):
+        zf = zipfile.ZipFile(path, "r")
+        # Pick the largest member — that's always the main data CSV in CMS zips
+        members = [m for m in zf.infolist() if m.filename.endswith(".csv")]
+        if not members:
+            raise ValueError(f"No CSV found inside {path}")
+        target = max(members, key=lambda m: m.file_size)
+        print(f"  Reading '{target.filename}' from zip "
+              f"({target.file_size / 1e9:.2f} GB uncompressed)")
+        file_obj = zf.open(target.filename)
+        return pd.read_csv(
+            file_obj,
+            usecols=usecols,
+            dtype=dtype,
+            chunksize=chunksize,
+            low_memory=False,
+        )
+    else:
+        return pd.read_csv(
+            path,
+            usecols=usecols,
+            dtype=dtype,
+            chunksize=chunksize,
+            low_memory=False,
+        )
+
 
 # ─────────────────────────────────────────────────────────
 # SPECIALTY MAPPING
@@ -156,13 +195,7 @@ def process_part_d(path, zip_centroids):
     skipped_zip = 0
     total_rows = 0
 
-    reader = pd.read_csv(
-        path,
-        usecols=PART_D_COLS,
-        dtype=str,
-        chunksize=CHUNK_SIZE,
-        low_memory=False,
-    )
+    reader = open_csv(path, PART_D_COLS, str, CHUNK_SIZE)
 
     for chunk_num, chunk in enumerate(reader):
         total_rows += len(chunk)
@@ -277,13 +310,7 @@ def process_open_payments(path, target_npis):
     matched = 0
     total_rows = 0
 
-    reader = pd.read_csv(
-        path,
-        usecols=OP_COLS,
-        dtype=str,
-        chunksize=CHUNK_SIZE,
-        low_memory=False,
-    )
+    reader = open_csv(path, OP_COLS, str, CHUNK_SIZE)
 
     for chunk_num, chunk in enumerate(reader):
         total_rows += len(chunk)
@@ -411,15 +438,27 @@ def main():
     print("Part D Volume Signal  +  Open Payments Competitor Signal")
     print("=" * 65)
 
-    # Verify input files
+    # Verify input files — accept either .zip or .csv variant
+    def find_file(base_path):
+        """Return the path that exists (.zip preferred, then .csv fallback)."""
+        zip_path = base_path if base_path.endswith(".zip") else base_path.replace(".csv", ".zip")
+        csv_path = base_path if base_path.endswith(".csv") else base_path.replace(".zip", ".csv")
+        if os.path.exists(zip_path):
+            return zip_path
+        if os.path.exists(csv_path):
+            return csv_path
+        return None
+
+    resolved_partd = find_file(PART_D_PATH)
+    resolved_op    = find_file(OPEN_PAYMENTS_PATH)
+
     missing = []
-    for label, path in [
-        ("Part D by Provider and Drug", PART_D_PATH),
-        ("Open Payments General Payments", OPEN_PAYMENTS_PATH),
-        ("ZIP centroid data", ZIP_DATA_PATH),
-    ]:
-        if not os.path.exists(path):
-            missing.append((label, path))
+    if not resolved_partd:
+        missing.append(("Part D by Provider and Drug", PART_D_PATH))
+    if not resolved_op:
+        missing.append(("Open Payments General Payments", OPEN_PAYMENTS_PATH))
+    if not os.path.exists(ZIP_DATA_PATH):
+        missing.append(("ZIP centroid data", ZIP_DATA_PATH))
 
     if missing:
         print("\n  Missing files — download before running:\n")
