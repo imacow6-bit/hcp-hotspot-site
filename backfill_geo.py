@@ -1,8 +1,9 @@
 """
 Backfill prescriber_scores.json with city-level coordinates.
-Reads NPI -> city from Part D, then geocodes using embedded US city data.
+Reads NPI -> city from Part D and places prescribers using
+deterministic state-aware ZIP anchors.
 """
-import json, csv, zipfile, random, os
+import json, csv, zipfile, random, os, hashlib
 from collections import defaultdict
 
 random.seed(42)
@@ -45,13 +46,14 @@ print("\n[2/3] Building geo lookup from ZIP centroids...")
 with open("src/zip_level_data.json") as f:
     zip_data = json.load(f)
 
-# Build state bounding boxes
+# Build state bounding boxes + sorted ZIP anchors per state
 state_bounds = defaultdict(lambda: {
     "min_lat": 90, "max_lat": -90,
     "min_lng": 180, "max_lng": -180,
     "center_lat": 0, "center_lng": 0,
     "count": 0
 })
+state_zip_anchors = defaultdict(list)
 
 for z in zip_data:
     s = state_bounds[z["state"]]
@@ -62,6 +64,12 @@ for z in zip_data:
     s["center_lat"] += z["lat"]
     s["center_lng"] += z["lng"]
     s["count"] += 1
+    docs_total = sum(z.get("docs", {}).values())
+    state_zip_anchors[z["state"]].append({
+        "lat": z["lat"],
+        "lng": z["lng"],
+        "weight": docs_total if docs_total > 0 else 1,
+    })
 
 for s in state_bounds.values():
     s["center_lat"] /= s["count"]
@@ -69,27 +77,39 @@ for s in state_bounds.values():
 
 print(f"  Built bounding boxes for {len(state_bounds)} states")
 
+for state in state_zip_anchors:
+    # Keep only most provider-dense ZIP anchors for cleaner urban clustering.
+    anchors = sorted(state_zip_anchors[state], key=lambda x: x["weight"], reverse=True)
+    state_zip_anchors[state] = anchors[:250]
+
+def stable_int(value, bits=64):
+    """Stable hash helper (independent of PYTHONHASHSEED)."""
+    digest = hashlib.blake2b(value.encode("utf-8"), digest_size=16).digest()
+    return int.from_bytes(digest, "big") & ((1 << bits) - 1)
+
 def city_to_coords(city, state):
-    """Deterministically map a city name to a coordinate within its state."""
+    """Deterministically map a city to a weighted ZIP anchor within its state."""
     bounds = state_bounds.get(state)
-    if not bounds:
+    anchors = state_zip_anchors.get(state)
+    if not bounds or not anchors:
         return None
-    
-    # Use hash of city name to create a deterministic but distributed position
-    # within the state's bounding box (inner 70% to avoid edge placement)
-    h = hash(city)
-    lat_range = bounds["max_lat"] - bounds["min_lat"]
-    lng_range = bounds["max_lng"] - bounds["min_lng"]
-    
-    # Use different bits of the hash for lat and lng
-    lat_frac = ((h & 0xFFFF) / 0xFFFF)  # 0..1
-    lng_frac = (((h >> 16) & 0xFFFF) / 0xFFFF)  # 0..1
-    
-    # Place within inner 70% of bounding box
-    margin = 0.15
-    lat = bounds["min_lat"] + lat_range * (margin + lat_frac * (1 - 2 * margin))
-    lng = bounds["min_lng"] + lng_range * (margin + lng_frac * (1 - 2 * margin))
-    
+
+    key = f"{city}|{state}"
+    h1 = stable_int(f"{key}|anchor")
+    h2 = stable_int(f"{key}|jitter")
+
+    # Pick an anchor near where providers are likely to exist.
+    anchor = anchors[h1 % len(anchors)]
+
+    # Deterministic small city-level jitter around that anchor.
+    # Scale by state size so large states can spread more naturally.
+    lat_range = max(bounds["max_lat"] - bounds["min_lat"], 1.0)
+    lng_range = max(bounds["max_lng"] - bounds["min_lng"], 1.0)
+    lat_jitter = (((h2 & 0xFFFF) / 0xFFFF) - 0.5) * (0.06 * lat_range)
+    lng_jitter = ((((h2 >> 16) & 0xFFFF) / 0xFFFF) - 0.5) * (0.06 * lng_range)
+
+    lat = anchor["lat"] + lat_jitter
+    lng = anchor["lng"] + lng_jitter
     return (lat, lng)
 
 # ─── Step 3: Patch prescriber_scores.json ─────────────────────────────────────
