@@ -493,6 +493,48 @@ body {
   font-style: italic;
 }
 
+/* ===== Tier 1 Explainer ===== */
+.tier1-explainer {
+  position: absolute;
+  bottom: 60px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  max-width: 280px;
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.tier1-explainer-star {
+  font-size: 22px;
+  color: #FFD700;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6));
+}
+
+.tier1-explainer-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FFD700;
+  margin-bottom: 3px;
+  letter-spacing: 0.3px;
+}
+
+.tier1-explainer-text {
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .topbar { padding: 10px 16px; }
