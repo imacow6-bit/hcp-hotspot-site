@@ -176,6 +176,61 @@ function findClusters(points, epsKm = 30, minPts = 5) {
     .sort((a, b) => b.count - a.count);
 }
 
+// ── Major metro centers to exclude from hotspot detection ────────────────────
+// Hotspots inside 30km of these are "obvious" and filtered out.
+// Hotspots beyond 150km of ALL metros are too remote and also filtered out.
+const MAJOR_METROS = [
+  { name: "New York",      lat: 40.713, lng: -74.006 },
+  { name: "Los Angeles",   lat: 34.052, lng: -118.244 },
+  { name: "Chicago",       lat: 41.878, lng: -87.630 },
+  { name: "Houston",       lat: 29.760, lng: -95.370 },
+  { name: "Phoenix",       lat: 33.449, lng: -112.074 },
+  { name: "Philadelphia",  lat: 39.953, lng: -75.164 },
+  { name: "San Antonio",   lat: 29.425, lng: -98.495 },
+  { name: "San Diego",     lat: 32.716, lng: -117.161 },
+  { name: "Dallas",        lat: 32.777, lng: -96.797 },
+  { name: "Austin",        lat: 30.267, lng: -97.743 },
+  { name: "San Francisco", lat: 37.775, lng: -122.419 },
+  { name: "Seattle",       lat: 47.606, lng: -122.332 },
+  { name: "Denver",        lat: 39.739, lng: -104.990 },
+  { name: "Boston",        lat: 42.360, lng: -71.059 },
+  { name: "Atlanta",       lat: 33.749, lng: -84.388 },
+  { name: "Miami",         lat: 25.762, lng: -80.192 },
+  { name: "Minneapolis",   lat: 44.978, lng: -93.265 },
+  { name: "Detroit",       lat: 42.331, lng: -83.046 },
+  { name: "Tampa",         lat: 27.951, lng: -82.458 },
+  { name: "St. Louis",     lat: 38.627, lng: -90.199 },
+  { name: "Baltimore",     lat: 39.290, lng: -76.612 },
+  { name: "Charlotte",     lat: 35.227, lng: -80.843 },
+  { name: "Portland",      lat: 45.523, lng: -122.677 },
+  { name: "Pittsburgh",    lat: 40.441, lng: -79.990 },
+  { name: "Cleveland",     lat: 41.500, lng: -81.694 },
+  { name: "Nashville",     lat: 36.163, lng: -86.782 },
+  { name: "Indianapolis",  lat: 39.768, lng: -86.158 },
+  { name: "Columbus",      lat: 39.961, lng: -82.999 },
+  { name: "Washington DC", lat: 38.907, lng: -77.037 },
+];
+
+const MIN_METRO_DIST_KM = 30;  // closer than this = "obvious metro cluster"
+const MAX_METRO_DIST_KM = 150; // farther than this from ALL metros = too remote
+
+function filterNonObviousHotspots(clusters) {
+  return clusters.filter((c) => {
+    const metroDists = MAJOR_METROS.map((m) => haversineKm(c.lat, c.lng, m.lat, m.lng));
+    const nearest = Math.min(...metroDists);
+    // Sweet spot: not inside a major metro, but within reach of one
+    return nearest >= MIN_METRO_DIST_KM && nearest <= MAX_METRO_DIST_KM;
+  }).map((c) => {
+    // Tag with nearest metro for context
+    let nearestMetro = MAJOR_METROS[0], nearestDist = Infinity;
+    for (const m of MAJOR_METROS) {
+      const d = haversineKm(c.lat, c.lng, m.lat, m.lng);
+      if (d < nearestDist) { nearestDist = d; nearestMetro = m; }
+    }
+    return { ...c, nearestMetro: nearestMetro.name, metroDistKm: nearestDist };
+  });
+}
+
 // ── Gold star canvas image for Tier 1 White Space markers ────────────────────
 function makeStarImage(size = 22, fillColor = "#FFD700") {
   const canvas = document.createElement("canvas");
@@ -275,8 +330,9 @@ export default function HCPHotspotMap() {
     const zoom = map.current.getZoom();
     const epsKm = zoom >= 10 ? 8 : zoom >= 7 ? 20 : 40;
     const minPts = zoom >= 10 ? 3 : 5;
-    const clusters = findClusters(pts, epsKm, minPts);
-    setHotspots(clusters.slice(0, 5)); // top 5 hotspots
+    const allClusters = findClusters(pts, epsKm, minPts);
+    const nonObvious = filterNonObviousHotspots(allClusters);
+    setHotspots(nonObvious.slice(0, 5)); // top 5 non-obvious hotspots
   }, [prescriberData, showTier1Only, activeSpecialty]);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
@@ -594,7 +650,7 @@ export default function HCPHotspotMap() {
       const size = Math.max(36, 50 - idx * 4);
       el.style.width = `${size}px`;
       el.style.height = `${size}px`;
-      el.title = `Hotspot: ${cluster.count} targets, ${cluster.totalClaims.toLocaleString()} claims`;
+      el.title = `${cluster.count} targets · ${cluster.totalClaims.toLocaleString()} claims · ${cluster.metroDistKm.toFixed(0)}km from ${cluster.nearestMetro}`;
 
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([cluster.lng, cluster.lat])
@@ -760,28 +816,6 @@ export default function HCPHotspotMap() {
               {viewportCentroid.lat.toFixed(3)}°N, {Math.abs(viewportCentroid.lng).toFixed(3)}°W
             </div>
             <div className="callout-hint">Pan/zoom to update region</div>
-          </div>
-        )}
-
-        {/* Hotspot list panel */}
-        {showTier1Only && hotspots.length > 0 && (
-          <div className="hotspot-panel">
-            <div className="hotspot-panel-title">🔥 High-Target Hotspots</div>
-            {hotspots.map((h, i) => (
-              <div
-                key={i}
-                className="hotspot-panel-row"
-                onClick={() => {
-                  map.current?.flyTo({ center: [h.lng, h.lat], zoom: 10, duration: 1200 });
-                }}
-              >
-                <span className="hotspot-rank">#{i + 1}</span>
-                <span className="hotspot-detail">
-                  {h.count} targets · {h.totalClaims.toLocaleString()} claims
-                </span>
-                <span className="hotspot-radius">{h.radiusKm.toFixed(0)}km</span>
-              </div>
-            ))}
           </div>
         )}
 
