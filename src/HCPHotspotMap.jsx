@@ -159,36 +159,45 @@ export default function HCPHotspotMap() {
         type: "circle",
         source: "prescribers",
         layout: { visibility: "visible" },
+        // Only show prescribers at zoom 6+ so density layer is readable at country view
+        minzoom: 6,
         paint: {
           "circle-color": SIGNAL_COLOR_EXPR,
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
-            4,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 1.5, 50000, 5],
-            8,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 3,   50000, 10],
-            12, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 5,   50000, 16],
+            6,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 0.5, 50000, 2],
+            8,  ["interpolate", ["linear"], ["get", "tot_clms"], 100, 1.5, 50000, 5],
+            10, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 3,   50000, 10],
+            14, ["interpolate", ["linear"], ["get", "tot_clms"], 100, 5,   50000, 16],
           ],
           "circle-opacity": [
-            "case",
-            // White space gets full opacity
-            ["all",
-              ["==", ["get", "tier"], 1],
-              ["!", ["get", "competitor_engaged"]],
+            "interpolate", ["linear"], ["zoom"],
+            6, 0.15,
+            8, ["case",
+              // White space gets full opacity
+              ["all",
+                ["==", ["get", "tier"], 1],
+                ["!", ["get", "competitor_engaged"]],
+              ],
+              0.92,
+              // Loyalty signal
+              ["get", "competitor_engaged"],
+              0.7,
+              // Volume signal (background)
+              0.45,
             ],
-            0.92,
-            // Loyalty signal
-            ["get", "competitor_engaged"],
-            0.7,
-            // Volume signal (background)
-            0.45,
           ],
           "circle-stroke-width": [
-            "case",
-            ["all",
-              ["==", ["get", "tier"], 1],
-              ["!", ["get", "competitor_engaged"]],
+            "interpolate", ["linear"], ["zoom"],
+            6, 0,
+            9, ["case",
+              ["all",
+                ["==", ["get", "tier"], 1],
+                ["!", ["get", "competitor_engaged"]],
+              ],
+              1.5,
+              0.5,
             ],
-            1.5,
-            0.5,
           ],
           "circle-stroke-color": [
             "case",
