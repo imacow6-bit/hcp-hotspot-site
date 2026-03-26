@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -52,13 +52,28 @@ const SIGNAL_COLOR_EXPR = [
 // OpenFreeMap free vector tiles — no token required
 const TILE_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
-// ── Water exclusion: simplified Lake Michigan polygon ─────────────────────────
+// ── Water exclusion: accurate Lake Michigan polygon (water boundary only) ─────
+// Western shore follows Chicago's actual coastline (~-87.62 downtown)
+// Southern shore follows Indiana Dunes / Gary coastline
+// Eastern shore follows Michigan coast
 const LAKE_MICHIGAN = [
-  [-87.9, 41.6], [-86.9, 41.6], [-86.6, 42.0], [-86.4, 42.8],
-  [-86.3, 43.5], [-86.4, 44.0], [-86.6, 44.8], [-87.4, 45.4],
-  [-87.8, 46.0], [-86.6, 46.1], [-85.3, 45.8], [-85.2, 45.2],
-  [-84.9, 44.8], [-85.1, 44.3], [-85.4, 44.0], [-85.8, 43.5],
-  [-86.0, 43.0], [-86.3, 42.4], [-87.2, 41.8], [-87.9, 41.6],
+  // Southern tip — Indiana shore (west to east)
+  [-87.52, 41.64], [-87.42, 41.64], [-87.30, 41.66], [-87.15, 41.68],
+  [-87.00, 41.70], [-86.85, 41.72], [-86.70, 41.76],
+  // Eastern shore — Michigan (south to north)
+  [-86.48, 41.90], [-86.30, 42.20], [-86.24, 42.50], [-86.22, 42.80],
+  [-86.22, 43.20], [-86.30, 43.60], [-86.40, 44.00], [-86.55, 44.40],
+  [-86.70, 44.80], [-86.90, 45.10], [-87.10, 45.35],
+  // Northern tip — Door County / Green Bay
+  [-87.40, 45.30], [-87.60, 45.10], [-87.75, 44.80],
+  // Western shore — Wisconsin (north to south)
+  [-87.80, 44.40], [-87.82, 44.00], [-87.84, 43.60], [-87.82, 43.20],
+  [-87.80, 42.90], [-87.78, 42.60], [-87.75, 42.30], [-87.70, 42.10],
+  [-87.68, 42.00], [-87.65, 41.92],
+  // Western shore — Chicago waterfront (north to south)
+  [-87.63, 41.88], [-87.60, 41.80], [-87.56, 41.72],
+  // Close polygon back to southern tip
+  [-87.52, 41.64],
 ];
 
 function pointInPolygon(lat, lng, poly) {
@@ -74,6 +89,91 @@ function pointInPolygon(lat, lng, poly) {
 
 function isInWater(lat, lng) {
   return pointInPolygon(lat, lng, LAKE_MICHIGAN);
+}
+
+// ── Haversine distance in km ─────────────────────────────────────────────────
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── DBSCAN-style clustering for hotspot detection ────────────────────────────
+function findClusters(points, epsKm = 30, minPts = 5) {
+  const n = points.length;
+  const labels = new Array(n).fill(-1); // -1 = unvisited
+  let clusterId = 0;
+
+  function regionQuery(idx) {
+    const neighbors = [];
+    const p = points[idx];
+    for (let i = 0; i < n; i++) {
+      if (haversineKm(p.lat, p.lng, points[i].lat, points[i].lng) <= epsKm)
+        neighbors.push(i);
+    }
+    return neighbors;
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (labels[i] !== -1) continue;
+    const neighbors = regionQuery(i);
+    if (neighbors.length < minPts) {
+      labels[i] = 0; // noise
+      continue;
+    }
+    clusterId++;
+    labels[i] = clusterId;
+    const queue = [...neighbors];
+    const visited = new Set([i]);
+    while (queue.length > 0) {
+      const j = queue.shift();
+      if (visited.has(j)) continue;
+      visited.add(j);
+      if (labels[j] === 0) labels[j] = clusterId;
+      if (labels[j] !== -1 && labels[j] !== clusterId) continue;
+      labels[j] = clusterId;
+      const nb2 = regionQuery(j);
+      if (nb2.length >= minPts) {
+        for (const k of nb2) if (!visited.has(k)) queue.push(k);
+      }
+    }
+  }
+
+  // Aggregate clusters
+  const clusterMap = {};
+  for (let i = 0; i < n; i++) {
+    if (labels[i] <= 0) continue;
+    if (!clusterMap[labels[i]]) clusterMap[labels[i]] = [];
+    clusterMap[labels[i]].push(points[i]);
+  }
+
+  return Object.values(clusterMap)
+    .map((pts) => {
+      let wLat = 0, wLng = 0, totalW = 0, totalClms = 0;
+      for (const p of pts) {
+        const w = p.tot_clms || 1;
+        wLat += p.lat * w;
+        wLng += p.lng * w;
+        totalW += w;
+        totalClms += p.tot_clms || 0;
+      }
+      return {
+        lat: wLat / totalW,
+        lng: wLng / totalW,
+        count: pts.length,
+        totalClaims: totalClms,
+        radiusKm: Math.max(
+          ...pts.map((p) => haversineKm(wLat / totalW, wLng / totalW, p.lat, p.lng))
+        ),
+      };
+    })
+    .sort((a, b) => b.count - a.count);
 }
 
 // ── Gold star canvas image for Tier 1 White Space markers ────────────────────
@@ -108,6 +208,7 @@ export default function HCPHotspotMap() {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const eventMarkerRef = useRef(null);
+  const clusterMarkersRef = useRef([]);
 
   const [activeSpecialty, setActiveSpecialty] = useState("All Specialties");
   const [showTier1Only, setShowTier1Only] = useState(false);
@@ -116,6 +217,8 @@ export default function HCPHotspotMap() {
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
   const [prescriberData, setPrescriberData] = useState(null);
   const [stats, setStats] = useState(null);
+  const [viewportCentroid, setViewportCentroid] = useState(null);
+  const [hotspots, setHotspots] = useState([]);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -132,9 +235,16 @@ export default function HCPHotspotMap() {
       .catch(() => setPrescriberData([]));
   }, []);
 
-  // ── Compute optimal event location (weighted centroid of Tier 1 White Space) ──
-  const eventLocation = useMemo(() => {
-    if (!prescriberData || !showTier1Only) return null;
+  // ── Compute viewport-based centroid + hotspots ────────────────────────────────
+  const updateViewportAnalysis = useCallback(() => {
+    if (!prescriberData || !showTier1Only || !map.current) {
+      setViewportCentroid(null);
+      setHotspots([]);
+      return;
+    }
+    const bounds = map.current.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
     const pts = prescriberData.filter(
       (p) =>
         p.lat != null &&
@@ -142,9 +252,16 @@ export default function HCPHotspotMap() {
         p.tier === 1 &&
         !p.competitor_engaged &&
         !isInWater(p.lat, p.lng) &&
+        p.lat >= sw.lat && p.lat <= ne.lat &&
+        p.lng >= sw.lng && p.lng <= ne.lng &&
         (activeSpecialty === "All Specialties" || p.specialty === activeSpecialty)
     );
-    if (pts.length === 0) return null;
+    if (pts.length === 0) {
+      setViewportCentroid(null);
+      setHotspots([]);
+      return;
+    }
+    // Weighted centroid of visible targets
     let wLat = 0, wLng = 0, totalW = 0;
     for (const p of pts) {
       const w = p.tot_clms || 1;
@@ -152,7 +269,14 @@ export default function HCPHotspotMap() {
       wLng += p.lng * w;
       totalW += w;
     }
-    return { lat: wLat / totalW, lng: wLng / totalW, count: pts.length };
+    setViewportCentroid({ lat: wLat / totalW, lng: wLng / totalW, count: pts.length });
+
+    // Cluster analysis — scale eps with zoom
+    const zoom = map.current.getZoom();
+    const epsKm = zoom >= 10 ? 8 : zoom >= 7 ? 20 : 40;
+    const minPts = zoom >= 10 ? 3 : 5;
+    const clusters = findClusters(pts, epsKm, minPts);
+    setHotspots(clusters.slice(0, 5)); // top 5 hotspots
   }, [prescriberData, showTier1Only, activeSpecialty]);
 
   // ── Initialize map ───────────────────────────────────────────────────────────
@@ -283,6 +407,12 @@ export default function HCPHotspotMap() {
       setMapLoaded(true);
     });
 
+    // ── Recompute centroid + hotspots on pan/zoom ───────────────────────────
+    map.current.on("moveend", () => {
+      // Trigger re-analysis — the updateViewportAnalysis callback handles it
+      window.dispatchEvent(new CustomEvent("map-moveend"));
+    });
+
     // ── Hover: ZIP density ──────────────────────────────────────────────────
     map.current.on("mousemove", "hcp-dots", (e) => {
       map.current.getCanvas().style.cursor = "pointer";
@@ -367,6 +497,18 @@ export default function HCPHotspotMap() {
     });
   }, [mapLoaded, prescriberData]);
 
+  // ── Listen for map moveend to recompute viewport analysis ──────────────────
+  useEffect(() => {
+    const handler = () => updateViewportAnalysis();
+    window.addEventListener("map-moveend", handler);
+    return () => window.removeEventListener("map-moveend", handler);
+  }, [updateViewportAnalysis]);
+
+  // Recompute when filters change
+  useEffect(() => {
+    updateViewportAnalysis();
+  }, [updateViewportAnalysis]);
+
   // ── Specialty + Tier 1 combined filter ──────────────────────────────────────
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
@@ -415,7 +557,7 @@ export default function HCPHotspotMap() {
     }
   }, [activeSpecialty, showTier1Only, mapLoaded]);
 
-  // ── Event location marker ────────────────────────────────────────────────────
+  // ── Event location marker (viewport centroid) ──────────────────────────────
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
@@ -423,16 +565,43 @@ export default function HCPHotspotMap() {
       eventMarkerRef.current.remove();
       eventMarkerRef.current = null;
     }
-    if (!eventLocation) return;
+    if (!viewportCentroid) return;
 
     const el = document.createElement("div");
     el.className = "event-location-marker";
     el.textContent = "📍";
 
     eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
-      .setLngLat([eventLocation.lng, eventLocation.lat])
+      .setLngLat([viewportCentroid.lng, viewportCentroid.lat])
       .addTo(map.current);
-  }, [eventLocation, mapLoaded]);
+  }, [viewportCentroid, mapLoaded]);
+
+  // ── Hotspot cluster markers ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    // Remove old markers
+    for (const m of clusterMarkersRef.current) m.remove();
+    clusterMarkersRef.current = [];
+
+    if (!showTier1Only || hotspots.length === 0) return;
+
+    hotspots.forEach((cluster, idx) => {
+      const el = document.createElement("div");
+      el.className = "hotspot-marker";
+      el.innerHTML = `<span class="hotspot-count">${cluster.count}</span>`;
+      // Size based on rank
+      const size = Math.max(36, 50 - idx * 4);
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.title = `Hotspot: ${cluster.count} targets, ${cluster.totalClaims.toLocaleString()} claims`;
+
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat([cluster.lng, cluster.lat])
+        .addTo(map.current);
+      clusterMarkersRef.current.push(marker);
+    });
+  }, [hotspots, showTier1Only, mapLoaded]);
 
   // Signal label/color helpers
   const getSignalLabel = (p) => {
@@ -579,17 +748,40 @@ export default function HCPHotspotMap() {
           </div>
         )}
 
-        {/* Optimal Event Location callout */}
-        {eventLocation && (
+        {/* Optimal Event Location callout — viewport-based */}
+        {viewportCentroid && (
           <div className="event-location-callout">
-            <div className="callout-title">📍 Optimal Event Location</div>
+            <div className="callout-title">📍 Optimal Event Location (this region)</div>
             <div className="callout-meta">
-              {eventLocation.count.toLocaleString()} Tier 1 White Space targets
+              {viewportCentroid.count.toLocaleString()} visible Tier 1 targets
               {activeSpecialty !== "All Specialties" ? ` · ${activeSpecialty}` : ""}
             </div>
             <div className="callout-coords">
-              {eventLocation.lat.toFixed(3)}°N, {Math.abs(eventLocation.lng).toFixed(3)}°W
+              {viewportCentroid.lat.toFixed(3)}°N, {Math.abs(viewportCentroid.lng).toFixed(3)}°W
             </div>
+            <div className="callout-hint">Pan/zoom to update region</div>
+          </div>
+        )}
+
+        {/* Hotspot list panel */}
+        {showTier1Only && hotspots.length > 0 && (
+          <div className="hotspot-panel">
+            <div className="hotspot-panel-title">🔥 High-Target Hotspots</div>
+            {hotspots.map((h, i) => (
+              <div
+                key={i}
+                className="hotspot-panel-row"
+                onClick={() => {
+                  map.current?.flyTo({ center: [h.lng, h.lat], zoom: 10, duration: 1200 });
+                }}
+              >
+                <span className="hotspot-rank">#{i + 1}</span>
+                <span className="hotspot-detail">
+                  {h.count} targets · {h.totalClaims.toLocaleString()} claims
+                </span>
+                <span className="hotspot-radius">{h.radiusKm.toFixed(0)}km</span>
+              </div>
+            ))}
           </div>
         )}
 

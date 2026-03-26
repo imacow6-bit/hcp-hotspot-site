@@ -459,6 +459,93 @@ body {
   letter-spacing: 0.3px;
 }
 
+/* ===== Hotspot Cluster Markers ===== */
+.hotspot-marker {
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 100, 0, 0.7) 0%, rgba(255, 60, 0, 0.25) 70%, transparent 100%);
+  border: 2px solid rgba(255, 140, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: hotspot-pulse 2.5s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(255, 100, 0, 0.4);
+}
+
+.hotspot-count {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes hotspot-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+/* ===== Hotspot Panel ===== */
+.hotspot-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 140, 0, 0.35);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  z-index: 100;
+  min-width: 220px;
+  box-shadow: 0 0 20px rgba(255, 100, 0, 0.1), 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.hotspot-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ff9100;
+  margin-bottom: 8px;
+}
+
+.hotspot-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 12px;
+}
+
+.hotspot-panel-row:hover {
+  background: rgba(255, 140, 0, 0.12);
+}
+
+.hotspot-rank {
+  font-weight: 700;
+  color: #ff9100;
+  min-width: 22px;
+}
+
+.hotspot-detail {
+  color: var(--text-bright);
+  flex: 1;
+}
+
+.hotspot-radius {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.callout-hint {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  font-style: italic;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .topbar { padding: 10px 16px; }
