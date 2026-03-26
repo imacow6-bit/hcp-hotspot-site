@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Data files
+*.zip
+*.csv
+!public/prescriber_scores.json
+!src/zip_level_data.json
+!src/bridge_table.json
