@@ -26,6 +26,7 @@ dist-ssr
 # Data files
 *.zip
 *.csv
+!uscities.csv
 !public/prescriber_scores.json
 !src/zip_level_data.json
 !src/bridge_table.json
