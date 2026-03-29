@@ -1,7 +1,7 @@
 """
 build_powerbi_data.py
 =====================
-Reads the three raw CMS zip files and produces 5 clean CSVs for Power BI.
+Reads the three raw CMS zip files and produces clean CSVs for Power BI.
 
 Usage:
     python build_powerbi_data.py
@@ -15,11 +15,13 @@ Output files:
     exports/payments.csv            — Open Payments detail (per NPI × company × type)
     exports/prescriber_drugs.csv    — Part D drug-level prescribing (per NPI × drug)
     exports/drug_reference.csv      — unique drug → specialty lookup table
+    exports/physician_venues.csv    — bridge table linking each physician to nearby venues within 15 mi
 """
 
 import csv
 import io
 import json
+import math
 import os
 import zipfile
 from collections import defaultdict
@@ -33,6 +35,12 @@ PARTD_ZIP     = r"C:\Users\aseem\Downloads\Medicare Part D Prescribers - by Prov
 
 EXPORTS_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
 CHUNK_SIZE    = 100_000   # rows to read at once — reduces memory usage
+
+# Path to the repo root (where src/zip_level_data.json lives).
+# If this script is inside the repo, it auto-detects. Otherwise, set manually.
+REPO_ROOT     = r"C:\Users\aseem\Downloads\NPPES data"  # change if your repo is elsewhere
+
+VENUE_RADIUS_MI = 15  # max miles between physician and venue for bridge table
 # =============================================================================
 
 
@@ -140,13 +148,45 @@ def stream_csv_chunks(zf, csv_name, usecols=None):
 
 
 def load_zip_centroids():
-    """Load ZIP → (lat, lng, state) from the existing zip_level_data.json."""
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "zip_level_data.json")
-    if not os.path.exists(path):
-        return {}
-    with open(path) as f:
-        data = json.load(f)
-    return {str(r["zip"]).zfill(5): (r["lat"], r["lng"], r.get("state", "")) for r in data}
+    """Load ZIP → (lat, lng, state) from zip_level_data.json.
+
+    Searches multiple likely locations so the script works regardless
+    of where you run it from.
+    """
+    search_paths = [
+        # Relative to script location
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "src", "zip_level_data.json"),
+        # Relative to REPO_ROOT config
+        os.path.join(REPO_ROOT, "src", "zip_level_data.json"),
+        # Common clone locations
+        os.path.join(os.path.expanduser("~"), "hcp-hotspot-site", "src", "zip_level_data.json"),
+        os.path.join(os.path.expanduser("~"), "Desktop", "hcp-hotspot-site", "src", "zip_level_data.json"),
+        os.path.join(os.path.expanduser("~"), "Documents", "hcp-hotspot-site", "src", "zip_level_data.json"),
+    ]
+    for path in search_paths:
+        if os.path.exists(path):
+            print(f"  Found zip_level_data.json at: {path}")
+            with open(path) as f:
+                data = json.load(f)
+            return {str(r["zip"]).zfill(5): (r["lat"], r["lng"], r.get("state", "")) for r in data}
+
+    print("  WARNING: zip_level_data.json not found. Physicians and orgs will have no lat/lng.")
+    print("  Searched:")
+    for p in search_paths:
+        print(f"    {p}")
+    print("  To fix: copy src/zip_level_data.json next to this script, or edit REPO_ROOT in CONFIG.")
+    return {}
+
+
+def haversine_miles(lat1, lng1, lat2, lng2):
+    """Great-circle distance between two points in miles."""
+    R = 3958.8  # Earth radius in miles
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlng / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +468,6 @@ def export_prescriber_drugs(zip_path):
         "Tot_Drug_Cst",
         "Tot_Benes",
         "GE65_Tot_Clms",
-        "Prscrbr_Ruca",     # Rural-Urban Commuting Area code — useful for rural/urban segmentation
     ]
 
     drug_specialty_map = {}   # {(brand, generic): specialty}  for drug_reference.csv
@@ -487,10 +526,9 @@ def export_prescriber_drugs(zip_path):
                     "Tot_30day_Fills":      "tot_30day_fills",
                     "Tot_Drug_Cst":         "tot_drug_cost_raw",
                     "Tot_Benes":            "tot_benes_raw",
-                    "Prscrbr_Ruca":         "ruca_code",
                 })[["npi", "last_name", "first_name", "state", "city",
                      "specialty_raw", "specialty", "brand_name", "generic_name",
-                     "tot_clms", "tot_cost", "tot_benes", "ruca_code"]]
+                     "tot_clms", "tot_cost", "tot_benes"]]
 
                 if writer is None:
                     writer = csv.DictWriter(fout, fieldnames=out.columns.tolist())
@@ -514,6 +552,104 @@ def export_prescriber_drugs(zip_path):
 
 
 # ---------------------------------------------------------------------------
+# 6. Bridge table — physician ↔ nearby venues (within VENUE_RADIUS_MI)
+# ---------------------------------------------------------------------------
+
+def export_physician_venues():
+    """Build a bridge table linking each physician to organizations within N miles.
+
+    Reads the already-exported physicians.csv and organizations.csv,
+    then computes haversine distance for each possible pair within the same
+    state (to keep the search space manageable) and emits rows where
+    distance <= VENUE_RADIUS_MI.
+    """
+    print(f"\n[6/6] Building physician ↔ venue bridge table ({VENUE_RADIUS_MI} mi radius)...")
+    phys_path = os.path.join(EXPORTS_DIR, "physicians.csv")
+    org_path  = os.path.join(EXPORTS_DIR, "organizations.csv")
+    out_path  = os.path.join(EXPORTS_DIR, "physician_venues.csv")
+
+    # Load organizations into memory (small enough — ~100K rows)
+    orgs_by_state = defaultdict(list)
+    with open(org_path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lat = row.get("lat")
+            lng = row.get("lng")
+            if not lat or not lng or lat == "" or lng == "":
+                continue
+            try:
+                orgs_by_state[row["state"]].append({
+                    "org_npi": row["org_npi"],
+                    "org_name": row["org_name"],
+                    "org_type": row["org_type"],
+                    "org_city": row["city"],
+                    "org_zip5": row["zip5"],
+                    "lat": float(lat),
+                    "lng": float(lng),
+                })
+            except (ValueError, KeyError):
+                continue
+
+    total_orgs = sum(len(v) for v in orgs_by_state.values())
+    print(f"    Loaded {total_orgs:,} geocoded organizations across {len(orgs_by_state)} states")
+
+    fields = ["npi", "physician_zip5", "org_npi", "org_name", "org_type",
+              "org_city", "org_zip5", "distance_miles"]
+    rows_written = 0
+    physicians_processed = 0
+
+    with open(out_path, "w", newline="", encoding="utf-8") as fout:
+        writer = csv.DictWriter(fout, fieldnames=fields)
+        writer.writeheader()
+
+        # Stream physicians to avoid loading 137K rows into memory at once
+        with open(phys_path, encoding="utf-8") as fin:
+            reader = csv.DictReader(fin)
+            for phys in reader:
+                physicians_processed += 1
+                plat = phys.get("lat")
+                plng = phys.get("lng")
+                if not plat or not plng or plat == "" or plng == "":
+                    continue
+
+                try:
+                    plat_f = float(plat)
+                    plng_f = float(plng)
+                except ValueError:
+                    continue
+
+                state = phys.get("state", "")
+                state_orgs = orgs_by_state.get(state, [])
+
+                # Find all orgs within radius
+                matches = []
+                for org in state_orgs:
+                    dist = haversine_miles(plat_f, plng_f, org["lat"], org["lng"])
+                    if dist <= VENUE_RADIUS_MI:
+                        matches.append((dist, org))
+
+                # Keep top 5 nearest venues per physician (avoids bloating the table)
+                matches.sort(key=lambda x: x[0])
+                for dist, org in matches[:5]:
+                    writer.writerow({
+                        "npi": phys["npi"],
+                        "physician_zip5": phys.get("zip5", ""),
+                        "org_npi": org["org_npi"],
+                        "org_name": org["org_name"],
+                        "org_type": org["org_type"],
+                        "org_city": org["org_city"],
+                        "org_zip5": org["org_zip5"],
+                        "distance_miles": round(dist, 1),
+                    })
+                    rows_written += 1
+
+                if physicians_processed % 50_000 == 0:
+                    print(f"    {physicians_processed:,} physicians processed, {rows_written:,} venue links...")
+
+    print(f"    physician_venues.csv: {rows_written:,} rows ({physicians_processed:,} physicians processed)")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -534,23 +670,26 @@ def main():
     export_organizations(NPPES_ZIP, zip_centroids)
     export_payments(PAYMENTS_ZIP)
     export_prescriber_drugs(PARTD_ZIP)
+    export_physician_venues()  # must run after physicians + organizations are exported
 
     print("""
 =============================================================
 Done! Files written to exports/
 
 Power BI import order (Get Data → Text/CSV):
-  1. physicians.csv        — individual providers (NPI is the join key)
-  2. organizations.csv     — hospitals & health systems
-  3. payments.csv          — Open Payments detail (join on npi)
-  4. prescriber_drugs.csv  — Part D drug-level prescribing (join on npi)
-  5. drug_reference.csv    — dimension table (brand/generic → specialty)
+  1. physicians.csv          — individual providers (NPI is the join key)
+  2. organizations.csv       — hospitals & health systems
+  3. payments.csv            — Open Payments detail (join on npi)
+  4. prescriber_drugs.csv    — Part D drug-level prescribing (join on npi)
+  5. drug_reference.csv      — dimension table (brand/generic → specialty)
+  6. physician_venues.csv    — bridge table (join physicians ↔ organizations)
 
-Data model relationships:
-  physicians.npi      → payments.npi          (one-to-many)
-  physicians.npi      → prescriber_drugs.npi  (one-to-many)
+Data model relationships (set up in Model View):
+  physicians.npi           → payments.npi              (one-to-many)
+  physicians.npi           → prescriber_drugs.npi      (one-to-many)
+  physicians.npi           → physician_venues.npi      (one-to-many)
+  organizations.org_npi    → physician_venues.org_npi  (one-to-many)
   drug_reference.brand_name → prescriber_drugs.brand_name (one-to-many)
-  physicians.state    → organizations.state   (for geographic filtering)
 
 NPI is always a TEXT field — do NOT let Power BI convert it to a number.
 =============================================================
