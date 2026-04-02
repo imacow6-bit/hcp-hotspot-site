@@ -289,7 +289,7 @@ export default function HCPHotspotMap() {
   const [hotspots, setHotspots] = useState([]);
   const [drawMode, setDrawMode] = useState(false);
   const [lassoCircle, setLassoCircle] = useState(null);
-  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showHeatmap] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(4);
   const [isochroneMode, setIsochroneMode] = useState(false);
   const [isochroneData, setIsochroneData] = useState(null);
@@ -1053,12 +1053,6 @@ export default function HCPHotspotMap() {
           </button>
         ))}
         <span className="filter-divider" />
-        <button
-          className={`filter-btn heatmap-btn ${showHeatmap ? "active" : ""}`}
-          onClick={() => setShowHeatmap((v) => !v)}
-        >
-          ★ Density
-        </button>
         <button
           className={`filter-btn draw-btn ${drawMode ? "active" : ""}`}
           onClick={() => {
