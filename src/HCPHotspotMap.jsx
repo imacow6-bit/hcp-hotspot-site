@@ -1267,12 +1267,12 @@ export default function HCPHotspotMap() {
 
               <div className="analysis-section">
                 <div className="analysis-section-label positive">✓ Positives</div>
-                <p>The 2027 Fort Lauderdale event has the best proximity to a major airport of all previous venues — a welcome signal for national attendance.</p>
+                <p>The 2027 Fort Lauderdale event has the best proximity to a major airport of all previous venues which is a welcome signal for national attendance.</p>
               </div>
 
               <div className="analysis-section">
                 <div className="analysis-section-label concern">⚠ Concerns</div>
-                <p>The 2027 location shows significant lows for cardiologists within a 30-minute drive time — 65% below the Fontainebleau location and 77% below Anaheim. However, Fort Lauderdale is more centralized between Miami-Dade, Broward, and Palm Beach, making it a closer drive for more than 87 additional cardiologists making 344,140 claims who practice north of Fort Lauderdale.</p>
+                <p>The 2027 location shows significant lows for cardiologists within a 30-minute drive time (65% below the Fontainebleau location and 77% below Anaheim).  However, Fort Lauderdale is more centralized between Miami-Dade, Broward, and Palm Beach, making it a closer drive for more than 87 additional cardiologists making 344,140 claims who practice north of Fort Lauderdale.</p>
               </div>
 
               <div className="analysis-section">
