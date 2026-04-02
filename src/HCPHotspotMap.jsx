@@ -1182,15 +1182,33 @@ export default function HCPHotspotMap() {
         <span className="filter-divider" />
         <button
           className={`filter-btn ${showAnalysisPanel ? "active" : ""}`}
-          onClick={() => {
+          onClick={async () => {
             const opening = !showAnalysisPanel;
             setShowAnalysisPanel(opening);
             if (opening && map.current) {
-              map.current.flyTo({
-                center: [-80.1426, 26.1118],
-                zoom: 10,
-                speed: 1.4,
-              });
+              map.current.flyTo({ center: [-80.1426, 26.1118], zoom: 10, speed: 1.4 });
+              // Auto-trigger drive time for ZIP 33316
+              try {
+                const res = await fetch(
+                  `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=33316+Fort+Lauderdale+FL&boundary.country=US&size=1`
+                );
+                const data = await res.json();
+                const coords = data.features?.[0]?.geometry?.coordinates;
+                if (coords) {
+                  const [lng, lat] = coords;
+                  // Drop event pin
+                  if (eventMarkerRef.current) { eventMarkerRef.current.remove(); eventMarkerRef.current = null; }
+                  const el = document.createElement("div");
+                  el.className = "event-pin-marker";
+                  el.innerHTML = '<div class="event-pin-icon">📌</div><div class="event-pin-label">Event Location</div>';
+                  eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+                    .setLngLat([lng, lat]).addTo(map.current);
+                  // Trigger isochrone
+                  setIsochroneData(null);
+                  map.current.getSource("isochrone-source")?.setData({ type: "FeatureCollection", features: [] });
+                  window.dispatchEvent(new CustomEvent("isochrone-click", { detail: { lng, lat } }));
+                }
+              } catch (err) { console.error("HOC geocode error:", err); }
             }
           }}
         >
@@ -1243,7 +1261,7 @@ export default function HCPHotspotMap() {
                   <th>Cardiologists</th>
                   <th>Total Claims</th>
                   <th>Avg Claims/MD</th>
-                  <th>Airport</th>
+                  <th>Nearest Airport</th>
                 </tr>
               </thead>
               <tbody>
