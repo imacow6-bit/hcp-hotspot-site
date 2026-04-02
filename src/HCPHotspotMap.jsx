@@ -289,7 +289,7 @@ export default function HCPHotspotMap() {
   const [hotspots, setHotspots] = useState([]);
   const [drawMode, setDrawMode] = useState(false);
   const [lassoCircle, setLassoCircle] = useState(null);
-  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showHeatmap] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(4);
   const [isochroneMode, setIsochroneMode] = useState(false);
   const [isochroneData, setIsochroneData] = useState(null);
@@ -1029,6 +1029,38 @@ export default function HCPHotspotMap() {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="search-bar">
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const q = e.target.elements.search.value.trim();
+            if (!q || !map.current) return;
+            try {
+              const res = await fetch(
+                `https://api.openrouteservice.org/geocode/search?api_key=${ORS_API_KEY}&text=${encodeURIComponent(q)}&boundary.country=US&size=1`
+              );
+              const data = await res.json();
+              const coords = data.features?.[0]?.geometry?.coordinates;
+              if (coords) {
+                map.current.flyTo({ center: coords, zoom: 11, speed: 1.4 });
+              }
+            } catch (err) {
+              console.error("Geocode error:", err);
+            }
+          }}
+        >
+          <input
+            name="search"
+            className="search-input"
+            type="text"
+            placeholder="Search ZIP or city..."
+            autoComplete="off"
+          />
+          <button type="submit" className="search-btn">Go</button>
+        </form>
+      </div>
+
       {/* Filter Bar */}
       <div className="filter-bar">
         <span className="filter-bar-label">Specialty</span>
@@ -1053,12 +1085,6 @@ export default function HCPHotspotMap() {
           </button>
         ))}
         <span className="filter-divider" />
-        <button
-          className={`filter-btn heatmap-btn ${showHeatmap ? "active" : ""}`}
-          onClick={() => setShowHeatmap((v) => !v)}
-        >
-          ★ Density
-        </button>
         <button
           className={`filter-btn draw-btn ${drawMode ? "active" : ""}`}
           onClick={() => {
