@@ -892,11 +892,22 @@ export default function HCPHotspotMap() {
           if (activeSpecialty !== "All Specialties" && p.specialty !== activeSpecialty) return false;
           return pointInPolygon(p.lat, p.lng, coords);
         });
+        // Count ALL physicians inside polygon by specialty (for total HCP metric)
+        const specialtyCounts = {};
+        let totalAllPhysicians = 0;
+        (prescriberData || []).forEach((p) => {
+          if (p.lat == null || p.lng == null) return;
+          if (!pointInPolygon(p.lat, p.lng, coords)) return;
+          specialtyCounts[p.specialty] = (specialtyCounts[p.specialty] || 0) + 1;
+          totalAllPhysicians++;
+        });
         map.current?.getSource("isochrone-source")?.setData(data);
         setIsochroneData({
           center: { lat, lng },
           targets: inside.length,
           totalClaims: inside.reduce((s, p) => s + (p.tot_clms || 0), 0),
+          specialtyCounts,
+          totalAllPhysicians,
         });
       } catch (err) {
         console.error("Isochrone API error:", err);
@@ -1299,7 +1310,9 @@ export default function HCPHotspotMap() {
                 </div>
               </>
             ) : (
-              <div className="callout-meta">No Tier 1 targets in this area</div>
+              <div className="callout-meta" style={{ color: "#ff9100" }}>
+                There are no Tier 1 targets in this area — doctors that prescribe high volume not yet engaged by competitors. This event is held in an area where HCPs overwhelmingly accept payments from pharma companies.
+              </div>
             )}
           </div>
         )}
@@ -1308,6 +1321,11 @@ export default function HCPHotspotMap() {
         {isochroneData && (
           <div className="isochrone-callout">
             <div className="callout-title">🚗 30-Min Drive Time Catchment</div>
+            <div className="callout-meta" style={{ fontSize: "15px", fontWeight: 700, color: "#00e5ff", marginBottom: "4px" }}>
+              {activeSpecialty === "All Specialties"
+                ? `${(isochroneData.totalAllPhysicians || 0).toLocaleString()} total HCPs`
+                : `${(isochroneData.specialtyCounts?.[activeSpecialty] || 0).toLocaleString()} total ${activeSpecialty} physicians`}
+            </div>
             <div className="callout-meta">
               {isochroneData.targets} Tier 1 targets · {isochroneData.totalClaims.toLocaleString()} claims
             </div>
