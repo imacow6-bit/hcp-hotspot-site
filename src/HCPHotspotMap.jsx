@@ -294,6 +294,7 @@ export default function HCPHotspotMap() {
   const [isochroneMode, setIsochroneMode] = useState(false);
   const [isochroneData, setIsochroneData] = useState(null);
   const [isochroneLoading, setIsochroneLoading] = useState(false);
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const lassoMarkerRef = useRef(null);
   const eventMarkerRef = useRef(null);
 
@@ -1178,6 +1179,13 @@ export default function HCPHotspotMap() {
             ✕ Clear Drive Time
           </button>
         )}
+        <span className="filter-divider" />
+        <button
+          className={`filter-btn ${showAnalysisPanel ? "active" : ""}`}
+          onClick={() => setShowAnalysisPanel(v => !v)}
+        >
+          📊 HOC Analysis
+        </button>
       </div>
 
       {/* Legend */}
@@ -1208,6 +1216,62 @@ export default function HCPHotspotMap() {
       {/* Map */}
       <div className="map-wrapper">
         <div ref={mapContainer} className="maplibre-container" />
+
+        {/* HOC Analysis Panel */}
+        {showAnalysisPanel && (
+          <div className="analysis-panel">
+            <div className="analysis-panel-header">
+              <span>📊 HOC Conference — Attendance Forecast Analysis</span>
+              <button className="analysis-close" onClick={() => setShowAnalysisPanel(false)}>✕</button>
+            </div>
+
+            <table className="analysis-table">
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Location</th>
+                  <th>Cardiologists</th>
+                  <th>Total Claims</th>
+                  <th>Avg Claims/MD</th>
+                  <th>Airport</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>2022</td><td>La Jolla</td><td>147</td><td>398,789</td><td>2,713</td><td>16 mi / 28 min</td>
+                </tr>
+                <tr>
+                  <td>2023</td><td>Anaheim</td><td>205</td><td>799,133</td><td>3,898</td><td>13.3 mi / 27 min</td>
+                </tr>
+                <tr>
+                  <td>2025/26</td><td>Miami Beach</td><td>130</td><td>385,123</td><td>2,963</td><td>11.2 mi / 22 min</td>
+                </tr>
+                <tr className="analysis-table-highlight">
+                  <td>2027</td><td>Fort Lauderdale</td><td>47</td><td>126,600</td><td>2,694</td><td>4.6 mi / 14 min</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="analysis-body">
+              <p className="analysis-disclaimer">Forecast constructed from 3 publicly accessible metrics: cardiologists within 30-min drive time, total claims, and airport proximity. Findings carry significant constraints without internal registration data.</p>
+
+              <div className="analysis-section">
+                <div className="analysis-section-label positive">✓ Positives</div>
+                <p>The 2027 Fort Lauderdale event has the best proximity to a major airport of all previous venues — a welcome signal for national attendance.</p>
+              </div>
+
+              <div className="analysis-section">
+                <div className="analysis-section-label concern">⚠ Concerns</div>
+                <p>The 2027 location shows significant lows for cardiologists within a 30-minute drive time — 65% below the Fontainebleau location and 77% below Anaheim. However, Fort Lauderdale is more centralized between Miami-Dade, Broward, and Palm Beach, making it a closer drive for more than 87 additional cardiologists making 344,140 claims who practice north of Fort Lauderdale.</p>
+              </div>
+
+              <div className="analysis-section">
+                <div className="analysis-section-label recommend">→ Recommendation</div>
+                <p>The 2027 HOC event should pay close attention to the mix between national and local attendees. It has the best positioning for national attendance but the lowest local cardiologist density of any HOC venue. We recommend including the area north of Fort Lauderdale for targeted marketing and outreach. Fontainebleau events should be used to set a baseline attendance threshold.</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Onboarding overlay — fades out as user zooms in */}
         {zoomLevel < 7 && (
