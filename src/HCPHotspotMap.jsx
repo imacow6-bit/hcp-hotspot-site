@@ -53,7 +53,7 @@ const SIGNAL_COLOR_EXPR = [
 const TILE_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
 // ── OpenRouteService API key — paste yours here ──────────────────────────────
-const ORS_API_KEY = "YOUR_ORS_API_KEY";
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI3YWZmZTE0YTIwYzQ4YzZhYTEzMmExNDI1NTNiMDk2IiwiaCI6Im11cm11cjY0In0=";
 
 // ── Water exclusion: accurate Lake Michigan polygon (water boundary only) ─────
 // Western shore follows Chicago's actual coastline (~-87.62 downtown)
