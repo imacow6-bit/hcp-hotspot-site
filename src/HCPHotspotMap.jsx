@@ -1295,7 +1295,7 @@ export default function HCPHotspotMap() {
                 <div className="onboarding-description">
                   <p>I pulled about 71,000 doctors from 2 databases to make this map. The first database is the NPI registry, which is basically a phone book for every licensed prescriber. The second data base is the CMS Open Payments database, which logs every dollar pharma companies pay to physicians.</p>
                   <p>I ranked them all by how much they prescribe and which pharma companies are paying them. The goal is to help sales teams figure out where to hold events, forecast who will potentially show up, and have a visual reference for areas where untapped doctors are clustered.</p>
-                  <p>This map may have the greatest application for rural or suburban areas where a clustering of doctors is not so obvious. Draw a circle around a group of doctors and it will tell you the closest geographical midpoint between all of them.</p>
+                  <p style={{ color: "#7ecfe0" }}>This map may have the greatest application for rural or suburban areas where a clustering of doctors is not so obvious. Draw a circle around a group of doctors and it will tell you the closest geographical midpoint between all of them.</p>
                 </div>
               </>
             ) : (
