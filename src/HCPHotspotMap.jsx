@@ -1186,6 +1186,7 @@ export default function HCPHotspotMap() {
             const opening = !showAnalysisPanel;
             setShowAnalysisPanel(opening);
             if (opening && map.current) {
+              setActiveSpecialty("Cardiology");
               map.current.flyTo({ center: [-80.1426, 26.1118], zoom: 10, speed: 1.4 });
               // Auto-trigger drive time for ZIP 33316
               try {
