@@ -852,8 +852,8 @@ body {
 /* ===== Isochrone Callout ===== */
 .isochrone-callout {
   position: absolute;
-  top: 16px;
-  right: 356px;
+  top: 35%;
+  right: 16px;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
