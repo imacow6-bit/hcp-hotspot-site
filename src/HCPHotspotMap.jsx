@@ -1257,7 +1257,7 @@ export default function HCPHotspotMap() {
                   <td>2025/26</td><td>Miami Beach</td><td>130</td><td>385,123</td><td>2,963</td><td>11.2 mi / 22 min</td>
                 </tr>
                 <tr className="analysis-table-highlight">
-                  <td>2027</td><td>Fort Lauderdale</td><td>47</td><td>126,600</td><td>2,694</td><td>4.6 mi / 14 min</td>
+                  <td>2027</td><td>Fort Lauderdale</td><td>46</td><td>126,600</td><td>2,694</td><td>4.6 mi / 14 min</td>
                 </tr>
               </tbody>
             </table>
