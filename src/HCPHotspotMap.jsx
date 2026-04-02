@@ -52,6 +52,9 @@ const SIGNAL_COLOR_EXPR = [
 // OpenFreeMap free vector tiles — no token required
 const TILE_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
+// ── OpenRouteService API key — paste yours here ──────────────────────────────
+const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI3YWZmZTE0YTIwYzQ4YzZhYTEzMmExNDI1NTNiMDk2IiwiaCI6Im11cm11cjY0In0=";
+
 // ── Water exclusion: accurate Lake Michigan polygon (water boundary only) ─────
 // Western shore follows Chicago's actual coastline (~-87.62 downtown)
 // Southern shore follows Indiana Dunes / Gary coastline
@@ -288,6 +291,9 @@ export default function HCPHotspotMap() {
   const [lassoCircle, setLassoCircle] = useState(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(4);
+  const [isochroneMode, setIsochroneMode] = useState(false);
+  const [isochroneData, setIsochroneData] = useState(null);
+  const [isochroneLoading, setIsochroneLoading] = useState(false);
   const lassoMarkerRef = useRef(null);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
@@ -488,6 +494,29 @@ export default function HCPHotspotMap() {
           "line-width": 2,
           "line-dasharray": [4, 3],
           "line-opacity": 0.7,
+        },
+      });
+
+      // ── Isochrone source + layers ────────────────────────────────────────────
+      map.current.addSource("isochrone-source", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.current.addLayer({
+        id: "isochrone-fill",
+        type: "fill",
+        source: "isochrone-source",
+        paint: { "fill-color": "#00e5ff", "fill-opacity": 0.10 },
+      });
+      map.current.addLayer({
+        id: "isochrone-outline",
+        type: "line",
+        source: "isochrone-source",
+        paint: {
+          "line-color": "#00e5ff",
+          "line-width": 2,
+          "line-dasharray": [4, 3],
+          "line-opacity": 0.85,
         },
       });
 
@@ -694,6 +723,14 @@ export default function HCPHotspotMap() {
       }));
     });
 
+    // ── Isochrone single-click handler ──────────────────────────────────────
+    map.current.on("click", (e) => {
+      if (!map.current.__isochroneMode) return;
+      window.dispatchEvent(new CustomEvent("isochrone-click", {
+        detail: { lng: e.lngLat.lng, lat: e.lngLat.lat },
+      }));
+    });
+
     return () => {
       clearInterval(pulseInterval);
       map.current?.remove();
@@ -811,6 +848,63 @@ export default function HCPHotspotMap() {
     };
     window.addEventListener("lasso-complete", handler);
     return () => window.removeEventListener("lasso-complete", handler);
+  }, [prescriberData, activeSpecialty]);
+
+  // ── Sync isochroneMode to map ref + cursor ──────────────────────────────────
+  useEffect(() => {
+    if (map.current) map.current.__isochroneMode = isochroneMode;
+    if (map.current) map.current.getCanvas().style.cursor = isochroneMode ? "crosshair" : "";
+  }, [isochroneMode]);
+
+  // ── Handle isochrone click → call ORS API ───────────────────────────────────
+  useEffect(() => {
+    const handler = async (e) => {
+      const { lat, lng } = e.detail;
+      setIsochroneMode(false);
+      if (map.current) {
+        map.current.__isochroneMode = false;
+        map.current.getCanvas().style.cursor = "";
+      }
+      setIsochroneLoading(true);
+      try {
+        const res = await fetch("https://api.openrouteservice.org/v2/isochrones/driving-car", {
+          method: "POST",
+          headers: {
+            Authorization: ORS_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            locations: [[lng, lat]],
+            range: [1800], // 30 minutes in seconds
+            range_type: "time",
+          }),
+        });
+        const data = await res.json();
+        const feature = data.features?.[0];
+        if (!feature) throw new Error("No isochrone returned");
+        const coords = feature.geometry.type === "Polygon"
+          ? feature.geometry.coordinates[0]
+          : feature.geometry.coordinates[0][0];
+        const inside = (prescriberData || []).filter((p) => {
+          if (p.lat == null || p.lng == null) return false;
+          if (p.tier !== 1 || p.competitor_engaged) return false;
+          if (activeSpecialty !== "All Specialties" && p.specialty !== activeSpecialty) return false;
+          return pointInPolygon(p.lat, p.lng, coords);
+        });
+        map.current?.getSource("isochrone-source")?.setData(data);
+        setIsochroneData({
+          center: { lat, lng },
+          targets: inside.length,
+          totalClaims: inside.reduce((s, p) => s + (p.tot_clms || 0), 0),
+        });
+      } catch (err) {
+        console.error("Isochrone API error:", err);
+      } finally {
+        setIsochroneLoading(false);
+      }
+    };
+    window.addEventListener("isochrone-click", handler);
+    return () => window.removeEventListener("isochrone-click", handler);
   }, [prescriberData, activeSpecialty]);
 
   // ── Lasso centroid pin marker ────────────────────────────────────────────
@@ -995,6 +1089,35 @@ export default function HCPHotspotMap() {
             ✕ Clear Circle
           </button>
         )}
+        <button
+          className={`filter-btn draw-btn ${isochroneMode ? "active" : ""}`}
+          disabled={isochroneLoading}
+          onClick={() => {
+            if (isochroneMode) {
+              setIsochroneMode(false);
+            } else {
+              setIsochroneData(null);
+              map.current?.getSource("isochrone-source")?.setData({ type: "FeatureCollection", features: [] });
+              setDrawMode(false);
+              setLassoCircle(null);
+              map.current?.getSource("lasso-circle")?.setData({ type: "FeatureCollection", features: [] });
+              setIsochroneMode(true);
+            }
+          }}
+        >
+          {isochroneLoading ? "⏳ Loading..." : "🚗 Drive Time"}
+        </button>
+        {isochroneData && (
+          <button
+            className="filter-btn"
+            onClick={() => {
+              setIsochroneData(null);
+              map.current?.getSource("isochrone-source")?.setData({ type: "FeatureCollection", features: [] });
+            }}
+          >
+            ✕ Clear Drive Time
+          </button>
+        )}
       </div>
 
       {/* Legend */}
@@ -1135,6 +1258,29 @@ export default function HCPHotspotMap() {
             ) : (
               <div className="callout-meta">No Tier 1 targets in this area</div>
             )}
+          </div>
+        )}
+
+        {/* Isochrone result callout */}
+        {isochroneData && (
+          <div className="lasso-callout">
+            <div className="callout-title">🚗 30-Min Drive Time Catchment</div>
+            <div className="callout-meta">
+              {isochroneData.targets} Tier 1 targets · {isochroneData.totalClaims.toLocaleString()} claims
+            </div>
+            <div className="callout-coords">
+              Center: {isochroneData.center.lat.toFixed(3)}°N, {Math.abs(isochroneData.center.lng).toFixed(3)}°W
+            </div>
+            <div className="callout-disclaimer">
+              Reflects actual road network — not a radius. Doctors outside the polygon are beyond a 30-minute drive from this point.
+            </div>
+          </div>
+        )}
+
+        {/* Isochrone mode hint */}
+        {isochroneMode && (
+          <div className="draw-mode-hint">
+            Click anywhere on the map to generate a 30-minute drive time area
           </div>
         )}
 
