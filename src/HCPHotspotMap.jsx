@@ -996,7 +996,7 @@ export default function HCPHotspotMap() {
     for (const m of clusterMarkersRef.current) m.remove();
     clusterMarkersRef.current = [];
 
-    if (hotspots.length === 0) return;
+    if (hotspots.length === 0 || zoomLevel < 6) return;
 
     hotspots.forEach((cluster, idx) => {
       const el = document.createElement("div");
