@@ -291,10 +291,10 @@ body {
 /* ===== ZIP Tooltip ===== */
 .zip-tooltip {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  bottom: 48px;
+  right: 16px;
   pointer-events: none;
-  z-index: 100;
+  z-index: 200;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -756,7 +756,7 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: 660px;
+  width: 780px;
   max-height: calc(100% - 32px);
   overflow-y: auto;
   overflow-x: hidden;
