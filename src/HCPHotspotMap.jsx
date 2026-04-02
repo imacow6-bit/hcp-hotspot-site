@@ -284,6 +284,7 @@ export default function HCPHotspotMap() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredZip, setHoveredZip] = useState(null);
   const [hoveredPrescriber, setHoveredPrescriber] = useState(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [prescriberData, setPrescriberData] = useState(null);
   const [stats, setStats] = useState(null);
   const [hotspots, setHotspots] = useState([]);
@@ -634,6 +635,7 @@ export default function HCPHotspotMap() {
       if (!f) return;
       map.current.setFilter("hcp-dots-hover", ["==", ["get", "zip"], f.properties.zip]);
       setHoveredZip({ ...f.properties, lngLat: e.lngLat });
+      setMousePos({ x: e.point.x, y: e.point.y });
     });
 
     map.current.on("mouseleave", "hcp-dots", () => {
@@ -653,6 +655,7 @@ export default function HCPHotspotMap() {
         companies: p.companies ? JSON.parse(p.companies) : [],
         lngLat: e.lngLat,
       });
+      setMousePos({ x: e.point.x, y: e.point.y });
     });
 
     map.current.on("mouseleave", "prescriber-dots", () => {
@@ -671,6 +674,7 @@ export default function HCPHotspotMap() {
         companies: p.companies ? JSON.parse(p.companies) : [],
         lngLat: e.lngLat,
       });
+      setMousePos({ x: e.point.x, y: e.point.y });
     });
 
     map.current.on("mouseleave", "tier1-stars", () => {
@@ -689,6 +693,7 @@ export default function HCPHotspotMap() {
         companies: p.companies ? JSON.parse(p.companies) : [],
         lngLat: e.lngLat,
       });
+      setMousePos({ x: e.point.x, y: e.point.y });
     });
 
     map.current.on("mouseleave", "tier2-stars", () => {
@@ -1313,7 +1318,7 @@ export default function HCPHotspotMap() {
 
         {/* ZIP Tooltip */}
         {hoveredZip && !hoveredPrescriber && (
-          <div className="zip-tooltip">
+          <div className="zip-tooltip" style={{ position: 'absolute', left: mousePos.x + 16, top: mousePos.y + 16, pointerEvents: 'none' }}>
             <div className="tooltip-city">ZIP {hoveredZip.zip} — {hoveredZip.state}</div>
             <div className="tooltip-meta">{hoveredZip.total} total physicians</div>
             {Object.entries(SPECIALTY_COLORS).map(([spec]) => (
@@ -1340,7 +1345,7 @@ export default function HCPHotspotMap() {
 
         {/* Prescriber Tooltip */}
         {hoveredPrescriber && (
-          <div className="zip-tooltip prescriber-tooltip">
+          <div className="zip-tooltip prescriber-tooltip" style={{ position: 'absolute', left: mousePos.x + 16, top: mousePos.y + 16, pointerEvents: 'none' }}>
             <div
               className="tooltip-signal-badge"
               style={{ color: getSignalColor(hoveredPrescriber) }}
