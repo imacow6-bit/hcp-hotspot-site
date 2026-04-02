@@ -1306,7 +1306,7 @@ export default function HCPHotspotMap() {
 
         {/* Isochrone result callout */}
         {isochroneData && (
-          <div className="lasso-callout">
+          <div className="isochrone-callout">
             <div className="callout-title">🚗 30-Min Drive Time Catchment</div>
             <div className="callout-meta">
               {isochroneData.targets} Tier 1 targets · {isochroneData.totalClaims.toLocaleString()} claims
@@ -1314,9 +1314,15 @@ export default function HCPHotspotMap() {
             <div className="callout-coords">
               Center: {isochroneData.center.lat.toFixed(3)}°N, {Math.abs(isochroneData.center.lng).toFixed(3)}°W
             </div>
-            <div className="callout-disclaimer">
-              Reflects actual road network — not a radius. Doctors outside the polygon are beyond a 30-minute drive from this point.
-            </div>
+            {isochroneData.targets === 0 ? (
+              <div className="callout-disclaimer" style={{ color: "#ff9100" }}>
+                This event is held in an area where HCPs overwhelmingly accept payments from pharma companies.
+              </div>
+            ) : (
+              <div className="callout-disclaimer">
+                Reflects actual road network — not a radius. Doctors outside the polygon are beyond a 30-minute drive from this point.
+              </div>
+            )}
           </div>
         )}
 

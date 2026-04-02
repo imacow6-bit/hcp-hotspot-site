@@ -749,6 +749,26 @@ body {
   color: var(--cyan);
 }
 
+/* ===== Isochrone Callout ===== */
+.isochrone-callout {
+  position: absolute;
+  top: 16px;
+  right: 356px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  padding: 12px 20px;
+  z-index: 100;
+  box-shadow: 0 0 20px var(--cyan-glow), 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 320px;
+}
+
+.isochrone-callout .callout-title {
+  color: var(--cyan);
+}
+
 /* ===== Onboarding Overlay ===== */
 .onboarding-overlay {
   position: absolute;
