@@ -754,7 +754,7 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: 500px;
+  width: 660px;
   max-height: calc(100% - 32px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -795,26 +795,24 @@ body {
   border-collapse: collapse;
   font-size: 13px;
   margin: 0;
-  table-layout: fixed;
 }
 .analysis-table th {
   background: rgba(0,229,255,0.08);
   color: var(--text-muted);
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 8px 12px;
   text-align: left;
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.4px;
   border-bottom: 1px solid rgba(0,229,255,0.15);
+  white-space: nowrap;
 }
 .analysis-table td {
-  padding: 7px 10px;
+  padding: 7px 12px;
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255,255,255,0.04);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .analysis-table-highlight td {
   color: var(--cyan);
