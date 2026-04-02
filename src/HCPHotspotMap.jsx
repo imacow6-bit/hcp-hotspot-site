@@ -1299,7 +1299,9 @@ export default function HCPHotspotMap() {
                 </div>
               </>
             ) : (
-              <div className="callout-meta">No Tier 1 targets in this area</div>
+              <div className="callout-meta" style={{ color: "#ff9100" }}>
+                There are no Tier 1 targets in this area — doctors that prescribe high volume not yet engaged by competitors. This event is held in an area where HCPs overwhelmingly accept payments from pharma companies.
+              </div>
             )}
           </div>
         )}
