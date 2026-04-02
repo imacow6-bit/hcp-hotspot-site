@@ -496,6 +496,34 @@ body {
   50% { transform: translateY(-6px); }
 }
 
+/* ===== Event Pin Marker ===== */
+.event-pin-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.event-pin-icon {
+  font-size: 42px;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px rgba(0, 229, 255, 0.9)) drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+  animation: pin-bounce 2s ease-in-out infinite;
+}
+
+.event-pin-label {
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 700;
+  color: #000;
+  background: rgba(0, 229, 255, 0.92);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: -4px;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
 /* ===== Callout Disclaimer ===== */
 .callout-disclaimer {
   font-size: 9px;

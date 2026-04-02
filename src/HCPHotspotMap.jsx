@@ -295,6 +295,7 @@ export default function HCPHotspotMap() {
   const [isochroneData, setIsochroneData] = useState(null);
   const [isochroneLoading, setIsochroneLoading] = useState(false);
   const lassoMarkerRef = useRef(null);
+  const eventMarkerRef = useRef(null);
 
   // ── Load prescriber data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -1042,9 +1043,25 @@ export default function HCPHotspotMap() {
               );
               const data = await res.json();
               const coords = data.features?.[0]?.geometry?.coordinates;
-              if (coords) {
-                map.current.flyTo({ center: coords, zoom: 11, speed: 1.4 });
+              if (!coords) return;
+              const [lng, lat] = coords;
+              // Fly to location
+              map.current.flyTo({ center: coords, zoom: 13, speed: 1.4 });
+              // Drop event location pin
+              if (eventMarkerRef.current) {
+                eventMarkerRef.current.remove();
+                eventMarkerRef.current = null;
               }
+              const el = document.createElement("div");
+              el.className = "event-pin-marker";
+              el.innerHTML = '<div class="event-pin-icon">📌</div><div class="event-pin-label">Event Location</div>';
+              eventMarkerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+                .setLngLat([lng, lat])
+                .addTo(map.current);
+              // Clear previous isochrone and auto-trigger drive time
+              setIsochroneData(null);
+              map.current.getSource("isochrone-source")?.setData({ type: "FeatureCollection", features: [] });
+              window.dispatchEvent(new CustomEvent("isochrone-click", { detail: { lng, lat } }));
             } catch (err) {
               console.error("Geocode error:", err);
             }
