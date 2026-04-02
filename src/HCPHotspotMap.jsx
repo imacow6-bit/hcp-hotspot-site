@@ -1182,7 +1182,17 @@ export default function HCPHotspotMap() {
         <span className="filter-divider" />
         <button
           className={`filter-btn ${showAnalysisPanel ? "active" : ""}`}
-          onClick={() => setShowAnalysisPanel(v => !v)}
+          onClick={() => {
+            const opening = !showAnalysisPanel;
+            setShowAnalysisPanel(opening);
+            if (opening && map.current) {
+              map.current.flyTo({
+                center: [-80.1426, 26.1118],
+                zoom: 10,
+                speed: 1.4,
+              });
+            }
+          }}
         >
           📊 HOC Analysis
         </button>

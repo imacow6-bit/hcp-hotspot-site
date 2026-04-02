@@ -754,9 +754,10 @@ body {
   position: absolute;
   top: 16px;
   left: 16px;
-  width: 400px;
+  width: 500px;
   max-height: calc(100% - 32px);
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -770,8 +771,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px 8px;
-  font-size: 12px;
+  padding: 14px 18px 10px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--cyan);
   border-bottom: 1px solid rgba(0,229,255,0.2);
@@ -783,7 +784,7 @@ body {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   padding: 0 2px;
   line-height: 1;
 }
@@ -792,24 +793,28 @@ body {
 .analysis-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 13px;
   margin: 0;
+  table-layout: fixed;
 }
 .analysis-table th {
   background: rgba(0,229,255,0.08);
   color: var(--text-muted);
   font-weight: 600;
-  padding: 6px 8px;
+  padding: 8px 10px;
   text-align: left;
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.4px;
   border-bottom: 1px solid rgba(0,229,255,0.15);
 }
 .analysis-table td {
-  padding: 5px 8px;
+  padding: 7px 10px;
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255,255,255,0.04);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .analysis-table-highlight td {
   color: var(--cyan);
@@ -818,32 +823,32 @@ body {
 }
 
 .analysis-body {
-  padding: 12px 16px;
+  padding: 14px 18px;
 }
 .analysis-disclaimer {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
   font-style: italic;
-  margin: 0 0 12px;
-  line-height: 1.5;
+  margin: 0 0 14px;
+  line-height: 1.6;
 }
 .analysis-section {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .analysis-section-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .analysis-section-label.positive { color: #69f0ae; }
 .analysis-section-label.concern  { color: #ff9100; }
 .analysis-section-label.recommend { color: var(--cyan); }
 .analysis-section p {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
   margin: 0;
 }
 
