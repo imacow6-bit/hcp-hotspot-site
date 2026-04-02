@@ -101,6 +101,58 @@ body {
   letter-spacing: 0.3px;
 }
 
+/* ===== Search Bar ===== */
+.search-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 24px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.search-bar form {
+  display: flex;
+  gap: 6px;
+}
+
+.search-input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 5px 12px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  color: #000;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 14px;
+  transition: opacity 0.15s;
+}
+
+.search-btn:hover {
+  opacity: 0.85;
+}
+
 /* ===== Filter Bar ===== */
 .filter-bar {
   display: flex;
