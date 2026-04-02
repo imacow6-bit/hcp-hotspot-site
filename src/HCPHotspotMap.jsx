@@ -1217,30 +1217,6 @@ export default function HCPHotspotMap() {
         </button>
       </div>
 
-      {/* Legend */}
-      {activeSpecialty === "All Specialties" && (
-        <div className="specialty-legend">
-          {Object.entries(SPECIALTY_COLORS).map(([spec, color]) => (
-            <span key={spec} className="legend-item">
-              <span className="legend-dot" style={{ background: color }} />
-              {spec}
-            </span>
-          ))}
-          <span className="legend-separator" />
-          <span className="legend-item">
-            <span style={{ color: SIGNAL_COLORS.whitespace, fontSize: "14px", lineHeight: 1 }}>★</span>
-            &nbsp;Tier 1 Target
-          </span>
-          <span className="legend-item">
-            <span style={{ color: "#D8D8D8", fontSize: "14px", lineHeight: 1 }}>★</span>
-            &nbsp;Tier 2
-          </span>
-          <span className="legend-item">
-            <span className="legend-square" style={{ background: SIGNAL_COLORS.loyalty }} />
-            Competitor Engaged
-          </span>
-        </div>
-      )}
 
       {/* Map */}
       <div className="map-wrapper">
