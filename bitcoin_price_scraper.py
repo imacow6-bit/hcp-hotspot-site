@@ -83,23 +83,26 @@ async def run_scraper():
         )
         page = await context.new_page()
 
-        print("Loading page...")
-        await page.goto(URL, wait_until="networkidle", timeout=30000)
-        print("Page loaded. Searching for price element...")
+        print("Loading page (this may take a moment)...")
+        await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+        print("DOM loaded. Waiting for page to fully render...")
 
-        # Wait a moment for any late-rendering JS
-        await page.wait_for_timeout(2000)
+        # Give the JS framework time to fetch data and render the price
+        await page.wait_for_timeout(10000)
 
         # Discover which selector works
         price_el, matched_selector = await find_price_element(page)
         if price_el is None:
-            # Fallback: dump visible text so you can find the right selector
+            # Fallback: dump visible text AND save HTML for debugging
             body_text = await page.inner_text("body")
+            html = await page.content()
             print("\nCould not auto-detect price element.")
-            print("Page visible text (first 2000 chars):\n")
-            print(body_text[:2000])
-            print("\n\nPlease inspect the page in your browser, find the CSS")
-            print("selector for the price, and add it to PRICE_SELECTORS.")
+            print("Page visible text (first 3000 chars):\n")
+            print(body_text[:3000])
+            with open("debug_page.html", "w", encoding="utf-8") as f:
+                f.write(html)
+            print("\n\nFull HTML saved to debug_page.html")
+            print("Open that file and search for the price number, then update PRICE_SELECTORS.")
             await browser.close()
             return
 
