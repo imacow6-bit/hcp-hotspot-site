@@ -2,139 +2,171 @@
 Bitcoin Real-Time Index (BRTI) Price Scraper
 Scrapes from CF Benchmarks: https://www.cfbenchmarks.com/data/indices/BRTI
 
+Uses Playwright (headless browser) to render the JS-heavy page, then polls
+the DOM at high frequency to read the live price.
+
 For theoretical/educational purposes only.
+
+Setup:
+    pip install playwright
+    playwright install chromium
 """
 
 import time
-import json
 import csv
 import asyncio
-import aiohttp
 from datetime import datetime, timezone
-
-# CF Benchmarks API endpoint for BRTI
-API_URL = "https://www.cfbenchmarks.com/api/v1/values?id=BRTI"
+from playwright.async_api import async_playwright
 
 # --- Configuration ---
-REQUESTS_PER_SECOND = 5        # How many requests per second
+URL = "https://www.cfbenchmarks.com/data/indices/BRTI"
+POLLS_PER_SECOND = 5           # How many times per second to read the price
 TOTAL_DURATION_SECONDS = 60    # How long to run (seconds)
 OUTPUT_FILE = "brti_prices.csv"
 # ---------------------
 
+# CSS selectors to try — inspect the page in your browser (right-click the
+# price -> Inspect Element) and update these if needed.
+PRICE_SELECTORS = [
+    "[data-testid='index-value']",
+    ".index-value",
+    ".price-value",
+    ".current-value",
+    "h1 + div span",            # common Next.js layout pattern
+    "text=/\\$[\\d,]+\\.\\d+/", # regex: match anything like $83,123.45
+]
 
-async def fetch_price(session: aiohttp.ClientSession, request_id: int) -> dict | None:
-    """Fetch the latest BRTI price from the CF Benchmarks API."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "Referer": "https://www.cfbenchmarks.com/data/indices/BRTI",
-    }
+
+async def find_price_element(page):
+    """Try multiple selectors to find the price element on the page."""
+    for selector in PRICE_SELECTORS:
+        try:
+            el = page.locator(selector).first
+            if await el.count() > 0:
+                text = await el.text_content()
+                if text and any(c.isdigit() for c in text):
+                    return el, selector
+        except Exception:
+            continue
+    return None, None
+
+
+def parse_price(text: str) -> float | None:
+    """Extract a numeric price from text like '$83,123.45' or '83123.45'."""
+    if not text:
+        return None
+    cleaned = text.replace("$", "").replace(",", "").replace(" ", "").strip()
     try:
-        async with session.get(API_URL, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                # The API returns a payload with server timestamp and value(s)
-                # Adjust parsing based on actual response structure
-                timestamp = datetime.now(timezone.utc).isoformat()
-                price = None
-
-                # Try common response shapes
-                if isinstance(data, dict):
-                    if "payload" in data:
-                        entries = data["payload"]
-                        if isinstance(entries, list) and entries:
-                            price = entries[-1].get("value") or entries[-1].get("price")
-                        elif isinstance(entries, dict):
-                            price = entries.get("value") or entries.get("price")
-                    elif "value" in data:
-                        price = data["value"]
-                    elif "price" in data:
-                        price = data["price"]
-
-                return {
-                    "request_id": request_id,
-                    "timestamp": timestamp,
-                    "price": price,
-                    "raw": data,
-                    "status": resp.status,
-                }
-            else:
-                return {
-                    "request_id": request_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "price": None,
-                    "raw": await resp.text(),
-                    "status": resp.status,
-                }
-    except Exception as e:
-        return {
-            "request_id": request_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "price": None,
-            "raw": str(e),
-            "status": "error",
-        }
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
-async def scrape_loop():
-    """Main scraping loop — fires REQUESTS_PER_SECOND concurrently each second."""
-    interval = 1.0 / REQUESTS_PER_SECOND
-    total_requests = REQUESTS_PER_SECOND * TOTAL_DURATION_SECONDS
+async def run_scraper():
     results = []
+    total_polls = POLLS_PER_SECOND * TOTAL_DURATION_SECONDS
+    interval = 1.0 / POLLS_PER_SECOND
 
-    print(f"Starting BRTI scraper: {REQUESTS_PER_SECOND} req/s for {TOTAL_DURATION_SECONDS}s")
-    print(f"Total requests planned: {total_requests}")
-    print("-" * 60)
+    print(f"Starting BRTI scraper: {POLLS_PER_SECOND} polls/s for {TOTAL_DURATION_SECONDS}s")
+    print(f"Total polls planned: {total_polls}")
+    print(f"Target URL: {URL}")
+    print("-" * 70)
 
-    connector = aiohttp.TCPConnector(limit=REQUESTS_PER_SECOND * 2)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        request_id = 0
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            )
+        )
+        page = await context.new_page()
+
+        print("Loading page...")
+        await page.goto(URL, wait_until="networkidle", timeout=30000)
+        print("Page loaded. Searching for price element...")
+
+        # Wait a moment for any late-rendering JS
+        await page.wait_for_timeout(2000)
+
+        # Discover which selector works
+        price_el, matched_selector = await find_price_element(page)
+        if price_el is None:
+            # Fallback: dump visible text so you can find the right selector
+            body_text = await page.inner_text("body")
+            print("\nCould not auto-detect price element.")
+            print("Page visible text (first 2000 chars):\n")
+            print(body_text[:2000])
+            print("\n\nPlease inspect the page in your browser, find the CSS")
+            print("selector for the price, and add it to PRICE_SELECTORS.")
+            await browser.close()
+            return
+
+        print(f"Found price element with selector: {matched_selector}")
+        sample = await price_el.text_content()
+        print(f"Current price text: {sample}")
+        print("-" * 70)
+
+        # --- High-frequency polling loop ---
+        poll_id = 0
         start_time = time.monotonic()
 
         while time.monotonic() - start_time < TOTAL_DURATION_SECONDS:
-            batch_start = time.monotonic()
+            loop_start = time.monotonic()
+            poll_id += 1
 
-            # Fire a batch of concurrent requests for this second
-            tasks = []
-            for _ in range(REQUESTS_PER_SECOND):
-                request_id += 1
-                tasks.append(fetch_price(session, request_id))
+            try:
+                text = await price_el.text_content()
+                price = parse_price(text)
+            except Exception as e:
+                text = str(e)
+                price = None
 
-            batch_results = await asyncio.gather(*tasks)
+            timestamp = datetime.now(timezone.utc).isoformat()
+            status = "OK" if price is not None else "ERR"
 
-            for r in batch_results:
-                if r:
-                    results.append(r)
-                    status_icon = "OK" if r["price"] is not None else f"!{r['status']}"
-                    print(f"  [{status_icon}] #{r['request_id']:>5}  {r['timestamp']}  ${r['price']}")
-
-            # Sleep the remainder of 1 second
-            elapsed = time.monotonic() - batch_start
-            if elapsed < 1.0:
-                await asyncio.sleep(1.0 - elapsed)
-
-    # Write results to CSV
-    print("-" * 60)
-    print(f"Done. {len(results)} responses collected. Writing to {OUTPUT_FILE}...")
-
-    with open(OUTPUT_FILE, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["request_id", "timestamp", "price", "status"])
-        writer.writeheader()
-        for r in results:
-            writer.writerow({
-                "request_id": r["request_id"],
-                "timestamp": r["timestamp"],
-                "price": r["price"],
-                "status": r["status"],
+            results.append({
+                "poll_id": poll_id,
+                "timestamp": timestamp,
+                "price": price,
+                "raw_text": text,
+                "status": status,
             })
 
-    # Also dump first raw response for debugging the API shape
-    if results:
-        print(f"\nSample raw API response (request #1):")
-        print(json.dumps(results[0]["raw"], indent=2) if isinstance(results[0]["raw"], dict) else results[0]["raw"])
+            print(f"  [{status}] #{poll_id:>6}  {timestamp}  ${price}")
+
+            # Sleep to maintain target poll rate
+            elapsed = time.monotonic() - loop_start
+            sleep_time = interval - elapsed
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+
+        await browser.close()
+
+    # --- Write CSV ---
+    print("-" * 70)
+    print(f"Done. {len(results)} polls collected. Writing to {OUTPUT_FILE}...")
+
+    with open(OUTPUT_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["poll_id", "timestamp", "price", "raw_text", "status"])
+        writer.writeheader()
+        for r in results:
+            writer.writerow(r)
+
+    # Summary stats
+    prices = [r["price"] for r in results if r["price"] is not None]
+    if prices:
+        print(f"\nSummary:")
+        print(f"  Successful reads: {len(prices)}/{len(results)}")
+        print(f"  Min price:  ${min(prices):,.2f}")
+        print(f"  Max price:  ${max(prices):,.2f}")
+        print(f"  Last price: ${prices[-1]:,.2f}")
+        unique = len(set(prices))
+        print(f"  Unique values seen: {unique}")
 
     print(f"\nResults saved to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
-    asyncio.run(scrape_loop())
+    asyncio.run(run_scraper())
